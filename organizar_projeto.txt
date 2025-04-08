@@ -1,0 +1,73 @@
+import os
+import shutil
+import re
+
+# Mapeamento: arquivo -> nova pasta
+file_map = {
+    'interface_grafica.py': 'interface',
+    'painel.py': 'interface',
+    'telalogin.py': 'interface',
+    'navegacao.py': 'interface',
+
+    'admin.py': 'telas',
+    'movimentacao.py': 'telas',
+    'cadastro.py': 'telas',
+    'exportacao.py': 'telas',
+
+    'database.py': 'database',
+    'database_utils.py': 'database',
+    'database_backup.py': 'database',
+    'config.py': 'database',
+
+    'barcode_reader.py': 'utils',
+    'rfid_reader.py': 'utils',
+    'consulta_planilha.py': 'utils',
+
+    'clean.py': 'experimental',
+    'test.py': 'experimental',
+
+    'estoque.py': 'estoque'
+}
+
+# Cria pastas se não existirem e move arquivos
+def mover_arquivos():
+    print("📦 Movendo arquivos...")
+    for file, folder in file_map.items():
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        if os.path.exists(file):
+            shutil.move(file, os.path.join(folder, file))
+            print(f"✔️  {file} -> {folder}/{file}")
+        else:
+            print(f"❌ Arquivo não encontrado: {file}")
+
+# Atualiza os imports nos arquivos Python
+def atualizar_imports():
+    print("\n🔁 Atualizando imports...")
+    py_files = [f for f in os.listdir('.') if f.endswith('.py')]
+    for folder in file_map.values():
+        py_files += [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith('.py')]
+
+    # Para cada arquivo, abrimos e ajustamos os imports
+    for file_path in py_files:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        original_content = content
+
+        for filename, folder in file_map.items():
+            module = filename.replace('.py', '')
+            pattern = rf'from\s+{module}\s+import'
+            replacement = f'from {folder}.{module} import'
+            content = re.sub(pattern, replacement, content)
+
+        if content != original_content:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"✔️  Imports atualizados em: {file_path}")
+
+# Executa tudo
+if __name__ == "__main__":
+    mover_arquivos()
+    atualizar_imports()
+    print("\n✅ Organização concluída!")
