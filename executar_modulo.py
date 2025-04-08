@@ -7,29 +7,48 @@ if len(sys.argv) < 2:
     print("\n📦 Exemplos disponíveis:")
 
     print("""
-# 📁 Módulos da pasta database
+# 📁 database
+python executar_modulo.py database.__init__
+python executar_modulo.py database.config
 python executar_modulo.py database.database
-python executar_modulo.py database.database_utils
 python executar_modulo.py database.database_backup
+python executar_modulo.py database.database_utils
 python executar_modulo.py database.scheduler
-          
-# 📁 Módulos da pasta interface
+
+# 📁 estoque
+python executar_modulo.py estoque.__init__
+python executar_modulo.py estoque.estoque
+
+# 📁 experimental
+python executar_modulo.py experimental.__init__
+python executar_modulo.py experimental.clean
+python executar_modulo.py experimental.test
+
+# 📁 interface
 python executar_modulo.py interface.interface_grafica
 python executar_modulo.py interface.navegacao
 python executar_modulo.py interface.painel
 python executar_modulo.py interface.telalogin
 
-# 📁 Módulos da pasta experimental (scripts de teste e manutenção)
-python executar_modulo.py experimental.test
-python executar_modulo.py experimental.clean
+# 📁 interface.telas
+python executar_modulo.py telas.__init__
+python executar_modulo.py telas.admin
+python executar_modulo.py telas.cadastro
+python executar_modulo.py telas.exportacao
+python executar_modulo.py telas.movimentacao
+python executar_modulo.py telas.tela_login_manual
+python executar_modulo.py telas.tela_login_rfid
 
-# 📁 Módulos de utilitários (linha de comando)
+# 📁 utils
+python executar_modulo.py utils.__init__
 python executar_modulo.py utils.barcode_reader
-python executar_modulo.py utils.rfid_reader
 python executar_modulo.py utils.consulta_planilha
+python executar_modulo.py utils.rfid_reader
 
-# 📁 Módulos de utilitários (linha de comando)
+# 📄 Arquivos principais
 python executar_modulo.py app
+python executar_modulo.py main
+
           
 # ❗ Observação:
 # Use sempre nomes no formato pacote.arquivo_sem_extensão
