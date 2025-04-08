@@ -4,29 +4,39 @@ from database.database_utils import executar_query
 from database.database import registrar_movimentacao, buscar_ferramenta_por_codigo, criar_tabelas
 
 # ----- Funções de Administração -----
-def registrar_usuario(nome, rfid):
+def registrar_usuario(nome, senha, rfid, tipo):
     """
     Registra um novo usuário no sistema.
 
     Parâmetros:
         nome (str): Nome do usuário.
+        senha (str): Senha do usuário já transformada (por exemplo, hash).
         rfid (str): RFID do usuário.
+        tipo (str): Tipo do usuário (ex: "admin", "usuario", etc.).
 
     Retorna:
         str: Mensagem de sucesso ou erro.
     """
     try:
-        nome, rfid = nome.strip(), rfid.strip()
-        if not nome or not rfid:
-            return "⚠️ Nome e RFID são obrigatórios!"
-        query = "INSERT INTO usuarios (nome, rfid) VALUES (?, ?)"
-        executar_query(query, (nome, rfid))
+        # Remove espaços em branco dos dados
+        nome = nome.strip()
+        senha = senha.strip()
+        rfid = rfid.strip()
+        tipo = tipo.strip()
+
+        # Validação dos campos obrigatórios
+        if not nome or not senha or not rfid or not tipo:
+            return "⚠️ Nome, Senha, RFID e Tipo são obrigatórios!"
+
+        query = "INSERT INTO usuarios (nome, senha, rfid, tipo) VALUES (?, ?, ?, ?)"
+        executar_query(query, (nome, senha, rfid, tipo))
         return f"✅ Usuário {nome} registrado com sucesso!"
     except Exception as e:
         return f"⚠️ Erro ao registrar usuário: {e}"
 
 
-def registrar_ferramenta(nome, codigo_barra, quantidade):
+
+def registrar_ferramenta(nome, codigo_barra, quantidade, estoque_ativo, consumivel):
     """
     Registra uma nova ferramenta no sistema.
 
@@ -34,41 +44,67 @@ def registrar_ferramenta(nome, codigo_barra, quantidade):
         nome (str): Nome da ferramenta.
         codigo_barra (str): Código de barras da ferramenta.
         quantidade (int): Quantidade inicial da ferramenta.
+        estoque_ativo (int ou str): Quantidade do estoque ativo.
+        consumivel (str): Indica se a ferramenta é consumível ("SIM" ou "NÃO").
 
     Retorna:
         str: Mensagem de sucesso ou erro.
     """
     try:
-        nome, codigo_barra = nome.strip(), codigo_barra.strip()
+        # Remove espaços em branco
+        nome = nome.strip()
+        codigo_barra = codigo_barra.strip()
+        
+        # Validação dos campos obrigatórios
         if not nome or not codigo_barra or quantidade < 0:
-            return "⚠️ Nome, código de barra e quantidade válida são obrigatórios!"
-        query = "INSERT INTO ferramentas (nome, codigo_barra, quantidade) VALUES (?, ?, ?)"
-        executar_query(query, (nome, codigo_barra, quantidade))
+            return "⚠️ Nome, código de barras e quantidade válida são obrigatórios!"
+
+        # Conversão e validação do estoque ativo
+        try:
+            # Se estoque_ativo for uma string não vazia, converte para inteiro; senão, usa 0
+            if isinstance(estoque_ativo, str) and estoque_ativo.strip():
+                estoque_ativo = int(estoque_ativo.strip())
+            elif not isinstance(estoque_ativo, int):
+                estoque_ativo = 0
+        except ValueError:
+            return "⚠️ Estoque ativo deve ser um número inteiro!"
+
+        # Tratar o campo consumível
+        consumivel = consumivel.strip().upper()  # Converte para maiúsculas para manter consistência
+        if consumivel not in ["SIM", "NÃO"]:
+            return "⚠️ O campo Consumível deve ser 'SIM' ou 'NÃO'!"
+
+        query = """
+            INSERT INTO ferramentas (nome, codigo_barra, quantidade, estoque_ativo, consumivel)
+            VALUES (?, ?, ?, ?, ?)
+        """
+        executar_query(query, (nome, codigo_barra, quantidade, estoque_ativo, consumivel))
         return f"✅ Ferramenta {nome} registrada com sucesso!"
     except Exception as e:
         return f"⚠️ Erro ao registrar ferramenta: {e}"
 
 
-def registrar_maquina(nome, localizacao):
+
+def registrar_maquina(nome):
     """
     Registra uma nova máquina no sistema.
 
     Parâmetros:
         nome (str): Nome da máquina.
-        localizacao (str): Localização da máquina.
 
     Retorna:
         str: Mensagem de sucesso ou erro.
     """
     try:
-        nome, localizacao = nome.strip(), localizacao.strip()
-        if not nome or not localizacao:
-            return "⚠️ Nome e localização são obrigatórios!"
-        query = "INSERT INTO maquinas (nome, localizacao) VALUES (?, ?)"
-        executar_query(query, (nome, localizacao))
+        nome = nome.strip()
+        if not nome:
+            return "⚠️ O nome da máquina é obrigatório!"
+        query = "INSERT INTO maquinas (nome) VALUES (?)"
+        executar_query(query, (nome,))
         return f"✅ Máquina {nome} registrada com sucesso!"
     except Exception as e:
         return f"⚠️ Erro ao registrar máquina: {e}"
+
 
 
 # ----- Funções de Movimentação -----

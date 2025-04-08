@@ -40,13 +40,13 @@ class DialogoConsumo(QDialog):
         self.spin_operacoes = QSpinBox()
         self.spin_operacoes.setMinimum(1)
         self.spin_operacoes.setMaximum(999)
-        self.layout.addRow("Número de Operações Totais:", self.spin_operacoes)
+        self.layout.addRow("Número de Operações Totais por Ferramenta:", self.spin_operacoes)
 
         # Campo de avaliação
         self.spin_avaliacao = QSpinBox()
         self.spin_avaliacao.setMinimum(1)
         self.spin_avaliacao.setMaximum(5)
-        self.layout.addRow("Avaliação (1-5/Pior-Melhor):", self.spin_avaliacao)
+        self.layout.addRow("Avaliação (1-5 / Pior-Melhor):", self.spin_avaliacao)
 
         # Botões OK / Cancelar
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

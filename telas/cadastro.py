@@ -1,10 +1,21 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QFormLayout, QMessageBox
+import os
+import sqlite3
+import hashlib
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
+    QFormLayout, QMessageBox, QComboBox
+)
 from PyQt5.QtGui import QIntValidator
 from PyQt5.QtCore import Qt
 
 from main import registrar_usuario, registrar_ferramenta, registrar_maquina
 
-
+def hash_senha(senha):
+    """
+    Gera um hash SHA-256 para a senha informada.
+    Em produção, considere utilizar bibliotecas como o bcrypt.
+    """
+    return hashlib.sha256(senha.encode('utf-8')).hexdigest()
 
 class TelaCadastros(QWidget):
     def __init__(self, navegacao):
@@ -32,12 +43,20 @@ class TelaCadastros(QWidget):
         label_usuarios.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(label_usuarios)
 
+        # Criando os campos de cadastro de usuário
         self.nome_usuario_input = QLineEdit()
+        self.senha_usuario_input = QLineEdit()
+        self.senha_usuario_input.setEchoMode(QLineEdit.Password)
         self.rfid_usuario_input = QLineEdit()
+        self.tipo_usuario_input = QComboBox()
+        # Exemplo de tipos; ajuste conforme necessário
+        self.tipo_usuario_input.addItems(["admin", "usuario"])
 
         form_usuario = QFormLayout()
         form_usuario.addRow("Nome:", self.nome_usuario_input)
+        form_usuario.addRow("Senha:", self.senha_usuario_input)
         form_usuario.addRow("RFID:", self.rfid_usuario_input)
+        form_usuario.addRow("Tipo:", self.tipo_usuario_input)
         self.layout.addLayout(form_usuario)
 
         btn_usuario = QPushButton("Adicionar Usuário")
@@ -53,13 +72,22 @@ class TelaCadastros(QWidget):
         self.nome_ferramenta_input = QLineEdit()
         self.codigo_barra_input = QLineEdit()
         self.quantidade_input = QLineEdit()
-        # Utiliza QIntValidator para garantir que somente inteiros sejam inseridos
         self.quantidade_input.setValidator(QIntValidator(0, 10000, self))
+
+        # Novos campos para refletir a estrutura do banco
+        self.estoque_ativo_input = QLineEdit()
+        self.estoque_ativo_input.setValidator(QIntValidator(0, 10000, self))
+        self.estoque_ativo_input.setPlaceholderText("Opcional (default: 0)")
+
+        self.consumivel_input = QComboBox()
+        self.consumivel_input.addItems(["NÃO", "SIM"])  # Padrão é "NÃO"
 
         form_ferramenta = QFormLayout()
         form_ferramenta.addRow("Nome:", self.nome_ferramenta_input)
         form_ferramenta.addRow("Código de Barras:", self.codigo_barra_input)
         form_ferramenta.addRow("Quantidade:", self.quantidade_input)
+        form_ferramenta.addRow("Estoque Ativo:", self.estoque_ativo_input)
+        form_ferramenta.addRow("Consumível:", self.consumivel_input)
         self.layout.addLayout(form_ferramenta)
 
         btn_ferramenta = QPushButton("Adicionar Ferramenta")
@@ -73,7 +101,7 @@ class TelaCadastros(QWidget):
         self.layout.addWidget(label_maquinas)
 
         self.nome_maquina_input = QLineEdit()
-
+        # Se o campo "localizacao" não for necessário, ele não aparece no cadastro.
         form_maquina = QFormLayout()
         form_maquina.addRow("Nome:", self.nome_maquina_input)
         self.layout.addLayout(form_maquina)
@@ -107,14 +135,23 @@ class TelaCadastros(QWidget):
             QMessageBox.warning(self, title, message)
 
     def adicionar_usuario(self):
-        if not self.validate_fields([("Nome", self.nome_usuario_input), ("RFID", self.rfid_usuario_input)]):
+        # Valida os campos obrigatórios (nome, senha e RFID)
+        if not self.validate_fields([("Nome", self.nome_usuario_input),
+                                     ("Senha", self.senha_usuario_input),
+                                     ("RFID", self.rfid_usuario_input)]):
             return
 
         nome = self.nome_usuario_input.text().strip()
+        senha = self.senha_usuario_input.text().strip()
         rfid = self.rfid_usuario_input.text().strip()
+        tipo = self.tipo_usuario_input.currentText().strip()
+
+        # Aplica hash na senha antes de registrar
+        senha_hash = hash_senha(senha)
 
         try:
-            resposta = registrar_usuario(nome, rfid)
+            # Registrar usuário com os quatro parâmetros: nome, senha_hash, rfid e tipo
+            resposta = registrar_usuario(nome, senha_hash, rfid, tipo)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar usuário: {str(e)}", info=False)
             return
@@ -122,11 +159,13 @@ class TelaCadastros(QWidget):
         if resposta.startswith("✅"):
             self.show_message("Sucesso", resposta)
             self.nome_usuario_input.clear()
+            self.senha_usuario_input.clear()
             self.rfid_usuario_input.clear()
         else:
             self.show_message("Erro", resposta, info=False)
 
     def adicionar_ferramenta(self):
+        # Valida os campos obrigatórios para ferramentas
         if not self.validate_fields([("Nome", self.nome_ferramenta_input),
                                      ("Código de Barras", self.codigo_barra_input),
                                      ("Quantidade", self.quantidade_input)]):
@@ -140,8 +179,16 @@ class TelaCadastros(QWidget):
             self.show_message("Erro", "Quantidade deve ser um número inteiro.", info=False)
             return
 
+        quantidade = int(quantidade_str)
+
+        # Para estoque_ativo: se não informado, usa 0
+        estoque_ativo_str = self.estoque_ativo_input.text().strip()
+        estoque_ativo = int(estoque_ativo_str) if estoque_ativo_str.isdigit() else 0
+        consumivel = self.consumivel_input.currentText().strip()
+
         try:
-            resposta = registrar_ferramenta(nome, codigo, int(quantidade_str))
+            # Registrar ferramenta com os cinco parâmetros
+            resposta = registrar_ferramenta(nome, codigo, quantidade, estoque_ativo, consumivel)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar ferramenta: {str(e)}", info=False)
             return
@@ -151,17 +198,20 @@ class TelaCadastros(QWidget):
             self.nome_ferramenta_input.clear()
             self.codigo_barra_input.clear()
             self.quantidade_input.clear()
+            self.estoque_ativo_input.clear()
         else:
             self.show_message("Erro", resposta, info=False)
 
     def adicionar_maquina(self):
+        # Valida o campo obrigatório para máquina (apenas nome)
         if not self.validate_fields([("Nome", self.nome_maquina_input)]):
             return
 
         nome = self.nome_maquina_input.text().strip()
 
         try:
-            resposta = registrar_maquina(nome, "")
+            # Registrar máquina usando somente o nome, já que o campo localização foi removido
+            resposta = registrar_maquina(nome)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar máquina: {str(e)}", info=False)
             return
@@ -171,3 +221,4 @@ class TelaCadastros(QWidget):
             self.nome_maquina_input.clear()
         else:
             self.show_message("Erro", resposta, info=False)
+
