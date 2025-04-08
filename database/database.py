@@ -50,7 +50,6 @@ def criar_tabelas():
         CREATE TABLE IF NOT EXISTS maquinas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
-            localizacao TEXT
         )
         """
     ]

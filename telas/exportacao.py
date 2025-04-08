@@ -76,7 +76,7 @@ class TelaExportacao(QWidget):
             "usuarios": "id, nome, senha, rfid, tipo",
             "ferramentas": "id, nome, codigo_barra, quantidade, estoque_ativo, consumivel",
             "logs": "id, usuario_id, ferramenta_id, acao, data_hora, quantidade, motivo, operacoes, avaliacao",
-            "maquinas": "id, nome, localizacao"
+            "maquinas": "id, nome"
         }
         for tabela, colunas in tabelas_info.items():
             label_tabela = QLabel(f"Tabela: {tabela}")
