@@ -92,6 +92,8 @@ class TelaMovimentacao(QWidget):
         self.navegacao = navegacao
         self.rfid_usuario = rfid_usuario
         self._init_ui()
+        self.acao_selecionada = None
+
 
     def _init_ui(self):
         """
@@ -144,7 +146,12 @@ class TelaMovimentacao(QWidget):
         form_layout.addRow("📄 Descrição:", self.lbl_descricao)
         form_layout.addRow("📊 Estoque:", self.lbl_estoque)
         form_layout.addRow("🔢 Quantidade:", self.spin_quantidade)
-        form_layout.addRow("🔁 Consumível:", self.lbl_consumivel)        
+        form_layout.addRow("🔁 Consumível:", self.lbl_consumivel)
+
+        self.label_status = QLabel("")
+        self.label_status.setStyleSheet("color: black; font-weight: normal;")
+        form_layout.addRow("", self.label_status)
+        
 
         return form_layout
 
@@ -155,16 +162,16 @@ class TelaMovimentacao(QWidget):
         layout_botoes = QVBoxLayout()
 
         btn_retirar = QPushButton("🔴 Retirar Ferramenta")
-        btn_retirar.clicked.connect(lambda: self.realizar_movimentacao_gui("RETIRADA"))
+        btn_retirar.clicked.connect(lambda: self._setar_acao_e_mover("RETIRADA"))
         layout_botoes.addWidget(btn_retirar)
 
         btn_devolver = QPushButton("🟢 Devolver Ferramenta")
-        btn_devolver.clicked.connect(lambda: self.realizar_movimentacao_gui("DEVOLUCAO"))
+        btn_devolver.clicked.connect(lambda: self._setar_acao_e_mover("DEVOLUCAO"))
         layout_botoes.addWidget(btn_devolver)
 
         # Botão de consumo como atributo, começa desabilitado
         self.btn_consumir = QPushButton("🔶 Consumir Ferramenta")
-        self.btn_consumir.clicked.connect(lambda: self.realizar_movimentacao_gui("CONSUMO"))
+        self.btn_consumir.clicked.connect(lambda: self._setar_acao_e_mover("CONSUMO"))
         self.btn_consumir.setEnabled(False)
         layout_botoes.addWidget(self.btn_consumir)
 
@@ -173,6 +180,14 @@ class TelaMovimentacao(QWidget):
         layout_botoes.addWidget(btn_voltar)
 
         return layout_botoes
+
+    def _setar_acao_e_mover(self, acao):
+        """
+        Define a ação selecionada e executa a movimentação correspondente.
+        """
+        self.acao_selecionada = acao
+        self.realizar_movimentacao_gui(acao)
+
 
 
     def _criar_tabela(self):
@@ -221,7 +236,7 @@ class TelaMovimentacao(QWidget):
         - Descrição
         - Estoque total e ativo
         - Status de consumível
-        Também habilita/desabilita o botão de consumo com base nisso.
+        Também prepara a interface para a movimentação.
         """
         codigo = self.codigo_barras_input.text().strip()
         if not codigo:
@@ -235,17 +250,17 @@ class TelaMovimentacao(QWidget):
             )
             self.lbl_consumivel.setText(dados.get("consumivel", "NÃO").strip().upper())
 
-            self.dados_ferramenta = dados  # guarda os dados para uso nas ações
+            self.dados_ferramenta = dados  # guarda os dados para uso na movimentação
 
-            # Resetar valor e deixar o máximo para definir depois conforme a ação
             self.spin_quantidade.setValue(1)
-            self.spin_quantidade.setMaximum(999)  # máximo temporário
+            self.spin_quantidade.setMaximum(999)  # limite temporário — será corrigido na movimentação
 
             # Habilita botão de consumo se for SIM
             if dados.get("consumivel", "NÃO").strip().upper() == "SIM":
                 self.btn_consumir.setEnabled(True)
             else:
                 self.btn_consumir.setEnabled(False)
+
         else:
             self.lbl_descricao.setText("🔎 Descrição: -")
             self.lbl_estoque.setText("📦 Estoque Atual: -")
@@ -255,44 +270,45 @@ class TelaMovimentacao(QWidget):
             self.btn_consumir.setEnabled(False)
 
 
+
+
     def realizar_movimentacao_gui(self, acao):
         """
         Realiza a movimentação da ferramenta conforme a ação especificada (RETIRADA, DEVOLUCAO ou CONSUMO)
         e atualiza a interface.
-
-        Parâmetros:
-            acao (str): Tipo de movimentação.
         """
         codigo_barras = self.validar_campos()
         if not codigo_barras:
             return
 
         if not hasattr(self, 'dados_ferramenta') or not self.dados_ferramenta:
-            self._exibir_mensagem("Erro", "⚠️ Nenhuma peça selecionada.", "warning")
+            self._aplicar_feedback_erro("❌ Nenhuma peça selecionada.")
             return
 
         estoque_disponivel = self.dados_ferramenta['quantidade']
         estoque_ativo = self.dados_ferramenta['estoque_ativo']
-
-        # Ajusta o máximo permitido no campo de quantidade, conforme a ação
-        if acao == "DEVOLUCAO":
-            limite = estoque_ativo if estoque_ativo > 0 else 1
-        else:  # RETIRADA ou CONSUMO
-            limite = estoque_disponivel if estoque_disponivel > 0 else 1
-        self.spin_quantidade.setMaximum(limite)
-
-        # Se o valor atual for maior que o limite, força para o limite
-        if self.spin_quantidade.value() > limite:
-            self.spin_quantidade.setValue(limite)
-
         quantidade = self.spin_quantidade.value()
 
-        # Validação específica para devolução
-        if acao == "DEVOLUCAO" and estoque_ativo < quantidade:
-            self._exibir_mensagem("Erro", "⚠️ Estoque ativo insuficiente para devolução.", "warning")
+        # Verificações manuais de limites
+        if acao == "RETIRADA" and quantidade > estoque_disponivel:
+            self._aplicar_feedback_erro("❌ Estoque insuficiente para retirada.")
+            self.spin_quantidade.clear()
             return
 
-        # Ação de consumo com popup
+        if acao == "DEVOLUCAO" and quantidade > estoque_ativo:
+            self._aplicar_feedback_erro("❌ Estoque ativo insuficiente para devolução.")
+            self.spin_quantidade.clear()
+            return
+
+        if acao == "CONSUMO" and quantidade > estoque_disponivel:
+            self._aplicar_feedback_erro("❌ Estoque insuficiente para consumo.")
+            self.spin_quantidade.clear()
+            return
+
+        # Ajusta visualmente, tudo ok
+        self._resetar_feedback_visual()
+
+        # Pop-up para consumo
         if acao == "CONSUMO":
             dialog = DialogoConsumo(self)
             if dialog.exec_() == QDialog.Accepted:
@@ -305,23 +321,34 @@ class TelaMovimentacao(QWidget):
         else:
             resposta = realizar_movimentacao(self.rfid_usuario, codigo_barras, acao, quantidade)
 
+        # Resposta e feedback visual
         if isinstance(resposta, dict):
+            mensagem = resposta.get("mensagem", "")
             if resposta.get("status"):
-                self._exibir_mensagem("Sucesso", resposta.get("mensagem"), "info")
+                self.label_status.setText(mensagem)
                 self._limpar_campos()
                 self.carregar_ultimas_movimentacoes()
             else:
-                self._exibir_mensagem("Erro", resposta.get("mensagem"), "warning")
+                self._aplicar_feedback_erro(mensagem)
         else:
-            if resposta.startswith("✅"):
-                self._exibir_mensagem("Sucesso", resposta, "info")
-                self._limpar_campos()
-                self.carregar_ultimas_movimentacoes()
+            if isinstance(resposta, str) and resposta.startswith("❌"):
+                self._aplicar_feedback_erro(resposta)
             else:
-                self._exibir_mensagem("Erro", resposta, "warning")
+                self.label_status.setText(resposta)
 
 
+    def _aplicar_feedback_erro(self, mensagem):
+        self.spin_quantidade.setStyleSheet("background-color: #ffcccc;")
+        self.label_status.setStyleSheet("color: red; font-weight: bold;")
+        self.label_status.setText(mensagem)
 
+    def _resetar_feedback_visual(self):
+        self.spin_quantidade.setStyleSheet("")
+        self.label_status.setStyleSheet("color: black; font-weight: normal;")
+        self.label_status.setText("")
+
+         
+            
     def _limpar_campos(self):
         """
         Limpa os campos de entrada e reseta os labels para os valores padrão.

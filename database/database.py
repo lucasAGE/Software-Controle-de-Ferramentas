@@ -95,26 +95,28 @@ def buscar_ferramenta_por_codigo(codigo_barra):
 
 
 def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=None, operacoes=None, avaliacao=None):
-    """
-    Registra uma movimentação de ferramenta e atualiza os estoques (total e ativo) conforme a ação.
-
-    Parâmetros:
-        usuario_id (int): ID do usuário que realiza a operação.
-        codigo_barra (str): Código de barras da ferramenta.
-        acao (str): Ação realizada ('RETIRADA', 'DEVOLUCAO' ou 'CONSUMO').
-        quantidade (int): Quantidade a ser movimentada.
-        motivo (str, opcional): Motivo da operação, necessário para CONSUMO.
-        operacoes (int, opcional): Número de operações realizadas (para consumo).
-        avaliacao (int, opcional): Nota de 1 a 5 quanto à qualidade/durabilidade (para consumo).
-
-    Retorna:
-        dict: {'status': bool, 'mensagem': str}
-    """
     ferramenta = buscar_ferramenta_por_codigo(codigo_barra)
     if not ferramenta:
         return {"status": False, "mensagem": "⚠️ Ferramenta não encontrada!"}
 
     ferramenta_id = ferramenta["id"]
+    estoque_total = ferramenta["quantidade"]
+    estoque_ativo = ferramenta["estoque_ativo"]
+
+    # Validação de estoques
+    if acao == "RETIRADA":
+        if quantidade > estoque_total:
+            return {"status": False, "mensagem": "❌ Estoque insuficiente para retirada"}
+    elif acao == "DEVOLUCAO":
+        if quantidade > estoque_ativo:
+            return {"status": False, "mensagem": "❌ Estoque ativo insuficiente para devolução"}
+    elif acao == "CONSUMO":
+        if motivo is None or operacoes is None or avaliacao is None:
+            return {"status": False, "mensagem": "⚠️ Dados incompletos para consumo!"}
+        if quantidade > estoque_total:
+            return {"status": False, "mensagem": "❌ Estoque insuficiente para consumo"}
+    else:
+        return {"status": False, "mensagem": "⚠️ Ação inválida!"}
 
     try:
         if acao == "RETIRADA":
@@ -142,16 +144,12 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
             executar_query(query_update, (quantidade, quantidade, codigo_barra))
 
         elif acao == "CONSUMO":
-            if motivo is None or operacoes is None or avaliacao is None:
-                return {"status": False, "mensagem": "⚠️ Dados incompletos para consumo!"}
-
             query_log = """
             INSERT INTO logs (usuario_id, ferramenta_id, acao, quantidade, motivo, operacoes, avaliacao)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """
             executar_query(query_log, (usuario_id, ferramenta_id, acao, quantidade, motivo, operacoes, avaliacao))
 
-            # Consumo: estoque total ↓, estoque_ativo permanece inalterado
             query_update = """
             UPDATE ferramentas 
             SET quantidade = quantidade - ?
@@ -159,13 +157,11 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
             """
             executar_query(query_update, (quantidade, codigo_barra))
 
-        else:
-            return {"status": False, "mensagem": "⚠️ Ação inválida!"}
-
         return {"status": True, "mensagem": f"✅ Movimentação '{acao}' realizada com sucesso!"}
 
     except Exception as e:
         return {"status": False, "mensagem": f"⚠️ Erro ao registrar movimentação: {e}"}
+
 
 
 
