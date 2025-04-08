@@ -58,7 +58,7 @@ def importar_ferramentas_da_planilha():
     for _, row in df.iterrows():
         ref_sistema = row.get('Ref. Sistema', '').strip()
         descricao = row.get('Descrição', '').strip()
-        consumivel = str(row.get('Consumível?', 'NÃO')).strip().upper()
+        consumivel = str(row.get('Consumível', 'NÃO')).strip().upper()
 
         if ref_sistema and descricao:
             executar_query(
