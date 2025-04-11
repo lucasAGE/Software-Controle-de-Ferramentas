@@ -7,12 +7,11 @@ from PyQt5.QtCore import Qt
 from main import registrar_usuario, registrar_ferramenta, registrar_maquina
 
 
-
 class Admin(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Administrador")
-        # Removemos a geometria fixa pois vamos usar tela cheia
+        # Removemos a geometria fixa, pois vamos usar tela cheia
         # self.setGeometry(200, 200, 400, 350)
 
         # Define uma fonte padrão maior para todos os widgets
@@ -81,7 +80,8 @@ class Admin(QWidget):
         form_ferramentas = QFormLayout()
         form_ferramentas.addRow("Nome:", self.nome_ferramenta_input)
         form_ferramentas.addRow("Código de Barra:", self.codigo_barra_input)
-        form_ferramentas.addRow("Quantidade:", self.quantidade_input)
+        # Atualizamos o rótulo para refletir a nova terminologia (estoque almoxarifado)
+        form_ferramentas.addRow("Estoque Almoxarifado:", self.quantidade_input)
         layout.addLayout(form_ferramentas)
 
         adicionar_ferramenta_btn = QPushButton("Adicionar Ferramenta")
@@ -114,7 +114,8 @@ class Admin(QWidget):
         rfid = self.rfid_input.text().strip()
 
         try:
-            resposta = registrar_usuario(nome, rfid)
+            # Para o registro de usuário, foi adicionado a senha e o tipo com valores padrões
+            resposta = registrar_usuario(nome, "senha", rfid, "operador")
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar usuário: {str(e)}", info=False)
             return
@@ -133,7 +134,8 @@ class Admin(QWidget):
         nome = self.nome_maquina_input.text().strip()
 
         try:
-            resposta = registrar_maquina(nome, "ignorado")  # Localização eliminada
+            # Atualizado para utilizar apenas o nome, conforme a nova assinatura
+            resposta = registrar_maquina(nome)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar máquina: {str(e)}", info=False)
             return
@@ -145,9 +147,11 @@ class Admin(QWidget):
             self.show_message("Erro", resposta, info=False)
 
     def adicionar_ferramenta(self):
-        if not self.validate_fields([("Nome", self.nome_ferramenta_input),
-                                     ("Código de Barra", self.codigo_barra_input),
-                                     ("Quantidade", self.quantidade_input)]):
+        if not self.validate_fields([
+                ("Nome", self.nome_ferramenta_input),
+                ("Código de Barra", self.codigo_barra_input),
+                ("Estoque Almoxarifado", self.quantidade_input)
+            ]):
             return
 
         nome = self.nome_ferramenta_input.text().strip()
@@ -162,7 +166,11 @@ class Admin(QWidget):
         quantidade = int(quantidade_str)
 
         try:
-            resposta = registrar_ferramenta(nome, codigo_barra, quantidade)
+            # Para registrar uma ferramenta, usamos:
+            # - Estoque Almoxarifado: valor informado no formulário;
+            # - Estoque Ativo: inicializamos com 0;
+            # - Consumível: definido como padrão 'NÃO'
+            resposta = registrar_ferramenta(nome, codigo_barra, quantidade, 0, "NÃO")
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar ferramenta: {str(e)}", info=False)
             return

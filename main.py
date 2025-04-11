@@ -36,14 +36,14 @@ def registrar_usuario(nome, senha, rfid, tipo):
 
 
 
-def registrar_ferramenta(nome, codigo_barra, quantidade, estoque_ativo, consumivel):
+def registrar_ferramenta(nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel):
     """
     Registra uma nova ferramenta no sistema.
 
     Parâmetros:
         nome (str): Nome da ferramenta.
         codigo_barra (str): Código de barras da ferramenta.
-        quantidade (int): Quantidade inicial da ferramenta.
+        estoque_almoxarifado (int): Quantidade inicial no almoxarifado.
         estoque_ativo (int ou str): Quantidade do estoque ativo.
         consumivel (str): Indica se a ferramenta é consumível ("SIM" ou "NÃO").
 
@@ -56,12 +56,11 @@ def registrar_ferramenta(nome, codigo_barra, quantidade, estoque_ativo, consumiv
         codigo_barra = codigo_barra.strip()
         
         # Validação dos campos obrigatórios
-        if not nome or not codigo_barra or quantidade < 0:
-            return "⚠️ Nome, código de barras e quantidade válida são obrigatórios!"
+        if not nome or not codigo_barra or estoque_almoxarifado < 0:
+            return "⚠️ Nome, código de barras e uma quantidade válida para o almoxarifado são obrigatórios!"
 
         # Conversão e validação do estoque ativo
         try:
-            # Se estoque_ativo for uma string não vazia, converte para inteiro; senão, usa 0
             if isinstance(estoque_ativo, str) and estoque_ativo.strip():
                 estoque_ativo = int(estoque_ativo.strip())
             elif not isinstance(estoque_ativo, int):
@@ -75,10 +74,10 @@ def registrar_ferramenta(nome, codigo_barra, quantidade, estoque_ativo, consumiv
             return "⚠️ O campo Consumível deve ser 'SIM' ou 'NÃO'!"
 
         query = """
-            INSERT INTO ferramentas (nome, codigo_barra, quantidade, estoque_ativo, consumivel)
+            INSERT INTO ferramentas (nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel)
             VALUES (?, ?, ?, ?, ?)
         """
-        executar_query(query, (nome, codigo_barra, quantidade, estoque_ativo, consumivel))
+        executar_query(query, (nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel))
         return f"✅ Ferramenta {nome} registrada com sucesso!"
     except Exception as e:
         return f"⚠️ Erro ao registrar ferramenta: {e}"
@@ -140,7 +139,7 @@ def devolver_ferramenta(rfid, codigo_barra, quantidade=1):
 
 def dar_baixa_ferramenta(codigo_barra):
     """
-    Zera a quantidade de uma ferramenta, efetivamente dando baixa nela.
+    Zera a quantidade do estoque almoxarifado de uma ferramenta, efetivamente dando baixa nela.
 
     Parâmetros:
         codigo_barra (str): Código de barras da ferramenta.
@@ -152,7 +151,7 @@ def dar_baixa_ferramenta(codigo_barra):
         codigo_barra = codigo_barra.strip()
         if not codigo_barra:
             return "⚠️ Código de barra é obrigatório!"
-        query = "UPDATE ferramentas SET quantidade = 0 WHERE codigo_barra = ?"
+        query = "UPDATE ferramentas SET estoque_almoxarifado = 0 WHERE codigo_barra = ?"
         executar_query(query, (codigo_barra,))
         return "✅ Ferramenta dada baixa com sucesso!"
     except Exception as e:
@@ -161,11 +160,11 @@ def dar_baixa_ferramenta(codigo_barra):
 
 def dar_alta_ferramenta(codigo_barra, quantidade):
     """
-    Incrementa a quantidade de uma ferramenta no estoque.
+    Incrementa a quantidade do estoque almoxarifado de uma ferramenta.
 
     Parâmetros:
         codigo_barra (str): Código de barras da ferramenta.
-        quantidade (int): Quantidade a ser adicionada.
+        quantidade (int): Quantidade a ser adicionada ao almoxarifado.
 
     Retorna:
         str: Mensagem de sucesso ou erro.
@@ -174,7 +173,7 @@ def dar_alta_ferramenta(codigo_barra, quantidade):
         codigo_barra = codigo_barra.strip()
         if not codigo_barra or quantidade <= 0:
             return "⚠️ Código de barra e quantidade válida são obrigatórios!"
-        query = "UPDATE ferramentas SET quantidade = quantidade + ? WHERE codigo_barra = ?"
+        query = "UPDATE ferramentas SET estoque_almoxarifado = estoque_almoxarifado + ? WHERE codigo_barra = ?"
         executar_query(query, (quantidade, codigo_barra))
         return f"✅ Ferramenta {codigo_barra} atualizada com sucesso!"
     except Exception as e:

@@ -71,6 +71,7 @@ class TelaCadastros(QWidget):
 
         self.nome_ferramenta_input = QLineEdit()
         self.codigo_barra_input = QLineEdit()
+        # Campo que antes era "Quantidade" agora representa o "Estoque Almoxarifado"
         self.quantidade_input = QLineEdit()
         self.quantidade_input.setValidator(QIntValidator(0, 10000, self))
 
@@ -85,7 +86,7 @@ class TelaCadastros(QWidget):
         form_ferramenta = QFormLayout()
         form_ferramenta.addRow("Nome:", self.nome_ferramenta_input)
         form_ferramenta.addRow("Código de Barras:", self.codigo_barra_input)
-        form_ferramenta.addRow("Quantidade:", self.quantidade_input)
+        form_ferramenta.addRow("Estoque Almoxarifado:", self.quantidade_input)
         form_ferramenta.addRow("Estoque Ativo:", self.estoque_ativo_input)
         form_ferramenta.addRow("Consumível:", self.consumivel_input)
         self.layout.addLayout(form_ferramenta)
@@ -168,7 +169,7 @@ class TelaCadastros(QWidget):
         # Valida os campos obrigatórios para ferramentas
         if not self.validate_fields([("Nome", self.nome_ferramenta_input),
                                      ("Código de Barras", self.codigo_barra_input),
-                                     ("Quantidade", self.quantidade_input)]):
+                                     ("Estoque Almoxarifado", self.quantidade_input)]):
             return
 
         nome = self.nome_ferramenta_input.text().strip()
@@ -176,7 +177,7 @@ class TelaCadastros(QWidget):
         quantidade_str = self.quantidade_input.text().strip()
 
         if not quantidade_str.isdigit():
-            self.show_message("Erro", "Quantidade deve ser um número inteiro.", info=False)
+            self.show_message("Erro", "Estoque Almoxarifado deve ser um número inteiro.", info=False)
             return
 
         quantidade = int(quantidade_str)
@@ -187,7 +188,9 @@ class TelaCadastros(QWidget):
         consumivel = self.consumivel_input.currentText().strip()
 
         try:
-            # Registrar ferramenta com os cinco parâmetros
+            # Registrar ferramenta com os cinco parâmetros:
+            # - estoque_almoxarifado: valor informado no campo "quantidade" (renomeado no rótulo)
+            # - estoque_ativo: conforme informado ou padrão 0
             resposta = registrar_ferramenta(nome, codigo, quantidade, estoque_ativo, consumivel)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar ferramenta: {str(e)}", info=False)
@@ -221,4 +224,3 @@ class TelaCadastros(QWidget):
             self.nome_maquina_input.clear()
         else:
             self.show_message("Erro", resposta, info=False)
-

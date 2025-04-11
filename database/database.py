@@ -26,7 +26,7 @@ def criar_tabelas():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             codigo_barra TEXT UNIQUE NOT NULL,
-            quantidade INTEGER NOT NULL,
+            estoque_almoxarifado INTEGER NOT NULL,
             estoque_ativo INTEGER NOT NULL DEFAULT 0,
             consumivel TEXT NOT NULL DEFAULT 'NÃO'
         )
@@ -49,7 +49,7 @@ def criar_tabelas():
         """
         CREATE TABLE IF NOT EXISTS maquinas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
+            nome TEXT NOT NULL
         )
         """
     ]
@@ -69,21 +69,21 @@ def buscar_ferramenta_por_codigo(codigo_barra):
         codigo_barra (str): Código de barras da ferramenta.
 
     Retorna:
-        dict: Dados da ferramenta (id, nome, quantidade, estoque_ativo, consumivel) se encontrada; caso contrário, None.
+        dict: Dados da ferramenta (id, nome, estoque_almoxarifado, estoque_ativo, consumivel) se encontrada; caso contrário, None.
     """
     query = """
-    SELECT id, nome, quantidade, estoque_ativo, consumivel
+    SELECT id, nome, estoque_almoxarifado, estoque_ativo, consumivel
     FROM ferramentas
     WHERE codigo_barra = ?
     """
     try:
         resultado = executar_query(query, (codigo_barra,), fetch=True)
         if resultado:
-            ferramenta_id, nome, quantidade, estoque_ativo, consumivel = resultado[0]
+            ferramenta_id, nome, estoque_almoxarifado, estoque_ativo, consumivel = resultado[0]
             return {
                 "id": ferramenta_id,
                 "nome": nome,
-                "quantidade": quantidade,
+                "estoque_almoxarifado": estoque_almoxarifado,
                 "estoque_ativo": estoque_ativo,
                 "consumivel": consumivel.strip().upper()  # Esperado: 'SIM' ou 'NÃO'
             }
@@ -92,19 +92,18 @@ def buscar_ferramenta_por_codigo(codigo_barra):
     return None
 
 
-
 def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=None, operacoes=None, avaliacao=None):
     ferramenta = buscar_ferramenta_por_codigo(codigo_barra)
     if not ferramenta:
         return {"status": False, "mensagem": "⚠️ Ferramenta não encontrada!"}
 
     ferramenta_id = ferramenta["id"]
-    estoque_total = ferramenta["quantidade"]
+    estoque_almoxarifado = ferramenta["estoque_almoxarifado"]
     estoque_ativo = ferramenta["estoque_ativo"]
 
-    # Validação de estoques
+    # Validação de estoques com os novos nomes
     if acao == "RETIRADA":
-        if quantidade > estoque_total:
+        if quantidade > estoque_almoxarifado:
             return {"status": False, "mensagem": "❌ Estoque insuficiente para retirada"}
     elif acao == "DEVOLUCAO":
         if quantidade > estoque_ativo:
@@ -112,7 +111,7 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
     elif acao == "CONSUMO":
         if motivo is None or operacoes is None or avaliacao is None:
             return {"status": False, "mensagem": "⚠️ Dados incompletos para consumo!"}
-        if quantidade > estoque_total:
+        if quantidade > estoque_almoxarifado:
             return {"status": False, "mensagem": "❌ Estoque insuficiente para consumo"}
     else:
         return {"status": False, "mensagem": "⚠️ Ação inválida!"}
@@ -124,7 +123,7 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
 
             query_update = """
             UPDATE ferramentas 
-            SET quantidade = quantidade - ?, 
+            SET estoque_almoxarifado = estoque_almoxarifado - ?, 
                 estoque_ativo = estoque_ativo + ?
             WHERE codigo_barra = ?
             """
@@ -136,7 +135,7 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
 
             query_update = """
             UPDATE ferramentas 
-            SET quantidade = quantidade + ?, 
+            SET estoque_almoxarifado = estoque_almoxarifado + ?, 
                 estoque_ativo = estoque_ativo - ?
             WHERE codigo_barra = ?
             """
@@ -151,7 +150,7 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
 
             query_update = """
             UPDATE ferramentas 
-            SET quantidade = quantidade - ?
+            SET estoque_almoxarifado = estoque_almoxarifado - ?
             WHERE codigo_barra = ?
             """
             executar_query(query_update, (quantidade, codigo_barra))
@@ -160,8 +159,6 @@ def registrar_movimentacao(usuario_id, codigo_barra, acao, quantidade, motivo=No
 
     except Exception as e:
         return {"status": False, "mensagem": f"⚠️ Erro ao registrar movimentação: {e}"}
-
-
 
 
 def buscar_ultimas_movimentacoes(limit=10):

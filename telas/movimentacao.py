@@ -94,7 +94,6 @@ class TelaMovimentacao(QWidget):
         self._init_ui()
         self.acao_selecionada = None
 
-
     def _init_ui(self):
         """
         Configura a interface do usuário, organizando os componentes em layout.
@@ -137,7 +136,8 @@ class TelaMovimentacao(QWidget):
         form_layout.addRow("🔖 Código de Barras:", self.codigo_barras_input)
 
         self.lbl_descricao = QLabel("🔎 Descrição: -")
-        self.lbl_estoque = QLabel("📦 Estoque Atual: -")
+        # Atualizado para refletir a nova nomenclatura: 'estoque_almoxarifado'
+        self.lbl_estoque = QLabel("📦 Almoxarifado: - | Ativo: -")
         self.lbl_consumivel = QLabel("🔁 Consumível: -")
         self.spin_quantidade = QSpinBox()
         self.spin_quantidade.setMinimum(1)
@@ -152,7 +152,6 @@ class TelaMovimentacao(QWidget):
         self.label_status.setStyleSheet("color: black; font-weight: normal;")
         form_layout.addRow("", self.label_status)
         
-
         return form_layout
 
     def _criar_botoes(self):
@@ -188,14 +187,13 @@ class TelaMovimentacao(QWidget):
         self.acao_selecionada = acao
         self.realizar_movimentacao_gui(acao)
 
-
-
     def _criar_tabela(self):
         """
         Cria e retorna a tabela que exibirá as últimas movimentações.
         """
         self.tabela = QTableWidget()
-        # Atualize o número de colunas se desejar incluir mais dados (ex.: motivo, operações e avaliação)
+        # Mantém as colunas para exibição de logs; 
+        # Note que esta tabela exibe o campo 'quantidade' (movimentada) da tabela logs.
         self.tabela.setColumnCount(9)
         self.tabela.setHorizontalHeaderLabels([
             "Data/Hora", "Operador", "Código", "Descrição", "Tipo", 
@@ -234,7 +232,7 @@ class TelaMovimentacao(QWidget):
         """
         Busca os dados da ferramenta a partir do código de barras e atualiza os campos:
         - Descrição
-        - Estoque total e ativo
+        - Estoque do Almoxarifado e Estoque Ativo
         - Status de consumível
         Também prepara a interface para a movimentação.
         """
@@ -246,31 +244,27 @@ class TelaMovimentacao(QWidget):
         if dados:
             self.lbl_descricao.setText(f"🔎 Descrição: {dados['nome']}")
             self.lbl_estoque.setText(
-                f"📦 Estoque Atual: {dados['quantidade']} unidades | Ativo: {dados['estoque_ativo']}"
+                f"📦 Almoxarifado: {dados['estoque_almoxarifado']} unidades | Ativo: {dados['estoque_ativo']}"
             )
             self.lbl_consumivel.setText(dados.get("consumivel", "NÃO").strip().upper())
 
-            self.dados_ferramenta = dados  # guarda os dados para uso na movimentação
+            self.dados_ferramenta = dados  # Guarda os dados para uso na movimentação
 
             self.spin_quantidade.setValue(1)
-            self.spin_quantidade.setMaximum(999)  # limite temporário — será corrigido na movimentação
+            self.spin_quantidade.setMaximum(999)
 
             # Habilita botão de consumo se for SIM
             if dados.get("consumivel", "NÃO").strip().upper() == "SIM":
                 self.btn_consumir.setEnabled(True)
             else:
                 self.btn_consumir.setEnabled(False)
-
         else:
             self.lbl_descricao.setText("🔎 Descrição: -")
-            self.lbl_estoque.setText("📦 Estoque Atual: -")
+            self.lbl_estoque.setText("📦 Almoxarifado: - | Ativo: -")
             self.lbl_consumivel.setText("🔁 Consumível: -")
             self._exibir_mensagem("Erro", "❌ Peça não encontrada.", "warning")
             self.dados_ferramenta = None
             self.btn_consumir.setEnabled(False)
-
-
-
 
     def realizar_movimentacao_gui(self, acao):
         """
@@ -285,7 +279,8 @@ class TelaMovimentacao(QWidget):
             self._aplicar_feedback_erro("❌ Nenhuma peça selecionada.")
             return
 
-        estoque_disponivel = self.dados_ferramenta['quantidade']
+        # Atualizado para utilizar a nova nomenclatura: estoque_almoxarifado
+        estoque_disponivel = self.dados_ferramenta['estoque_almoxarifado']
         estoque_ativo = self.dados_ferramenta['estoque_ativo']
         quantidade = self.spin_quantidade.value()
 
@@ -317,7 +312,7 @@ class TelaMovimentacao(QWidget):
                     self.rfid_usuario, codigo_barras, acao, quantidade, motivo, operacoes, avaliacao
                 )
             else:
-                return  # Cancelado
+                return  # Movimentação cancelada
         else:
             resposta = realizar_movimentacao(self.rfid_usuario, codigo_barras, acao, quantidade)
 
@@ -336,7 +331,6 @@ class TelaMovimentacao(QWidget):
             else:
                 self.label_status.setText(resposta)
 
-
     def _aplicar_feedback_erro(self, mensagem):
         self.spin_quantidade.setStyleSheet("background-color: #ffcccc;")
         self.label_status.setStyleSheet("color: red; font-weight: bold;")
@@ -347,15 +341,13 @@ class TelaMovimentacao(QWidget):
         self.label_status.setStyleSheet("color: black; font-weight: normal;")
         self.label_status.setText("")
 
-         
-            
     def _limpar_campos(self):
         """
         Limpa os campos de entrada e reseta os labels para os valores padrão.
         """
         self.codigo_barras_input.clear()
         self.lbl_descricao.setText("🔎 Descrição: -")
-        self.lbl_estoque.setText("📦 Estoque Atual: -")
+        self.lbl_estoque.setText("📦 Almoxarifado: - | Ativo: -")
         self.spin_quantidade.setValue(1)
 
     def carregar_ultimas_movimentacoes(self):

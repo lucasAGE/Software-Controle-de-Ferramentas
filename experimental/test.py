@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 from database import config
@@ -22,8 +21,6 @@ def preparar_dados_teste():
         ("administradorr", "senha", "0004279647", "admin")
     )
 
-    
-
     # Dados para a tabela 'maquinas'
     executar_query(
         "INSERT OR IGNORE INTO maquinas (nome) VALUES (?)",
@@ -36,10 +33,10 @@ def importar_ferramentas_da_planilha():
     """
     Lê a planilha 'Consulta Produtos IP.xlsx' (definida em config.PLANILHA_IP_CAMINHO)
     e insere cada linha na tabela 'ferramentas', mapeando:
-      - codigo_barra  <- 'Ref. Sistema'
-      - nome          <- 'Descrição'
-      - quantidade    <- 0 (fixo)
-      - consumivel    <- 'Consumível?' (padrão 'NÃO' se não encontrado)
+      - codigo_barra           <- 'Ref. Sistema'
+      - nome                   <- 'Descrição'
+      - estoque_almoxarifado   <- 0 (fixo)
+      - consumivel             <- 'Consumível?' (padrão 'NÃO' se não encontrado)
     """
     print("🧪 Importando ferramentas da planilha...")
 
@@ -62,13 +59,12 @@ def importar_ferramentas_da_planilha():
 
         if ref_sistema and descricao:
             executar_query(
-                "INSERT OR IGNORE INTO ferramentas (nome, codigo_barra, quantidade, consumivel) VALUES (?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO ferramentas (nome, codigo_barra, estoque_almoxarifado, consumivel) VALUES (?, ?, ?, ?)",
                 (descricao, ref_sistema, 0, consumivel)
             )
             inseridos += 1
 
     print(f"✅ Importação concluída! {inseridos} registros inseridos (ou ignorados se já existiam).")
-
 
 def verificar_dados():
     """
@@ -94,8 +90,6 @@ def main():
 
     # Importa dados de ferramentas a partir da planilha
     importar_ferramentas_da_planilha()
-
-    
 
 if __name__ == "__main__":
     main()

@@ -38,21 +38,21 @@ class TelaEstoque(QWidget):
 
     def _criar_formulario(self):
         """
-        Cria o formulário com os campos de entrada para o código de barras e quantidade.
+        Cria o formulário com os campos de entrada para o código de barras e a quantidade (estoque almoxarifado).
         Utiliza QIntValidator para garantir que a quantidade seja numérica.
         """
         # Campo: Código de barras
         self.codigo_input = QLineEdit()
         self.codigo_input.setPlaceholderText("Código de barras da ferramenta")
         
-        # Campo: Quantidade a adicionar com validador numérico
+        # Campo: Quantidade a adicionar (estoque almoxarifado) com validador numérico
         self.quantidade_input = QLineEdit()
-        self.quantidade_input.setPlaceholderText("Quantidade a adicionar")
+        self.quantidade_input.setPlaceholderText("Quantidade a adicionar ao Almoxarifado")
         self.quantidade_input.setValidator(QIntValidator(1, 10000, self))  # Exemplo de range de 1 a 10000
         
         form = QFormLayout()
         form.addRow("Código de Barras:", self.codigo_input)
-        form.addRow("Quantidade:", self.quantidade_input)
+        form.addRow("Estoque Almoxarifado:", self.quantidade_input)
         return form
 
     def _criar_botao_adicionar(self):

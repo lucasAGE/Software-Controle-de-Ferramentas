@@ -74,7 +74,8 @@ class TelaExportacao(QWidget):
         painel = QVBoxLayout()
         tabelas_info = {
             "usuarios": "id, nome, senha, rfid, tipo",
-            "ferramentas": "id, nome, codigo_barra, quantidade, estoque_ativo, consumivel",
+            # Atualizado para refletir a nova nomenclatura:
+            "ferramentas": "id, nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel",
             "logs": "id, usuario_id, ferramenta_id, acao, data_hora, quantidade, motivo, operacoes, avaliacao",
             "maquinas": "id, nome"
         }
