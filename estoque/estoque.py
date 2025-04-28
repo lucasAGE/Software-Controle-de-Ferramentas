@@ -1,153 +1,204 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QFormLayout, QMessageBox
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
+    QFormLayout, QMessageBox, QTableWidget, QTableWidgetItem
+)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIntValidator
 
-from main import dar_alta_ferramenta, dar_baixa_ferramenta
+from main import adicionar_ferramenta, subtrair_ferramenta, zerar_ferramenta
+from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
+
 
 class TelaEstoque(QWidget):
+    """
+    Tela para gerenciamento de estoque:
+      - ADICAO (➕)
+      - SUBTRACAO parcial (➖)
+      - ZERAR estoque (🗑️)
+    Mostra descrição, valores atuais e histórico de movimentações.
+    """
     def __init__(self, navegacao):
         """
-        Inicializa a tela de gerenciamento de estoque.
-        
-        Parâmetros:
-            navegacao: objeto responsável pela navegação entre telas.
+        :param navegacao: instância de Navegacao, que mantém rfid_usuario atualizado
         """
         super().__init__()
         self.navegacao = navegacao
-        self.init_ui()
+        self._build_ui()
 
-    def init_ui(self):
-        """
-        Configura a interface do usuário, incluindo a criação do título, formulário e botões.
-        """
+    def _build_ui(self):
         layout = QVBoxLayout()
-        layout.addWidget(self._criar_label_titulo())
-        layout.addLayout(self._criar_formulario())
-        layout.addWidget(self._criar_botao_adicionar())
-        layout.addWidget(self._criar_botao_remover())
-        layout.addWidget(self._criar_botao_voltar())
-        self.setLayout(layout)
 
-    def _criar_label_titulo(self):
-        """
-        Cria e retorna o rótulo do título centralizado.
-        """
-        label_titulo = QLabel("Gerenciamento de Estoque")
-        label_titulo.setAlignment(Qt.AlignCenter)
-        return label_titulo
+        # Título
+        lbl_title = QLabel("Gerenciamento de Estoque")
+        lbl_title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(lbl_title)
 
-    def _criar_formulario(self):
-        """
-        Cria o formulário com os campos de entrada para o código de barras e a quantidade (estoque almoxarifado).
-        Utiliza QIntValidator para garantir que a quantidade seja numérica.
-        """
-        # Campo: Código de barras
-        self.codigo_input = QLineEdit()
-        self.codigo_input.setPlaceholderText("Código de barras da ferramenta")
-        
-        # Campo: Quantidade a adicionar (estoque almoxarifado) com validador numérico
-        self.quantidade_input = QLineEdit()
-        self.quantidade_input.setPlaceholderText("Quantidade a adicionar ao Almoxarifado")
-        self.quantidade_input.setValidator(QIntValidator(1, 10000, self))  # Exemplo de range de 1 a 10000
-        
+        # Formulário código + quantidade
         form = QFormLayout()
-        form.addRow("Código de Barras:", self.codigo_input)
-        form.addRow("Estoque Almoxarifado:", self.quantidade_input)
-        return form
+        self.codigo_input = QLineEdit()
+        self.codigo_input.setPlaceholderText("Código de barras")
+        self.codigo_input.returnPressed.connect(self._on_codigo_enter)
 
-    def _criar_botao_adicionar(self):
-        """
-        Cria e retorna o botão para adicionar quantidade ao estoque.
-        """
-        btn_adicionar = QPushButton("➕ Adicionar ao Estoque")
-        btn_adicionar.clicked.connect(self.adicionar_estoque)
-        return btn_adicionar
+        self.qtde_input = QLineEdit()
+        self.qtde_input.setPlaceholderText("Quantidade")
+        self.qtde_input.setValidator(QIntValidator(1, 1_000_000, self))
 
-    def _criar_botao_remover(self):
-        """
-        Cria e retorna o botão para zerar o estoque da ferramenta.
-        """
-        btn_remover = QPushButton("🗑️ Zerar Estoque da Ferramenta")
-        btn_remover.clicked.connect(self.remover_estoque)
-        return btn_remover
+        form.addRow("Código:", self.codigo_input)
+        form.addRow("Quantidade:", self.qtde_input)
+        layout.addLayout(form)
 
-    def _criar_botao_voltar(self):
-        """
-        Cria e retorna o botão para retornar à tela anterior.
-        """
-        btn_voltar = QPushButton("⬅️ Voltar")
-        btn_voltar.clicked.connect(lambda: self.navegacao.mostrar_tela("painel"))
-        return btn_voltar
+        # Labels descrição e estoque
+        self.lbl_descricao = QLabel("🔎 Descrição: -")
+        self.lbl_estoque   = QLabel("📦 Almoxarifado: - | Ativo: -")
+        layout.addWidget(self.lbl_descricao)
+        layout.addWidget(self.lbl_estoque)
 
-    def _limpar_campos(self):
-        """
-        Limpa os campos de entrada da tela.
-        """
-        self.codigo_input.clear()
-        self.quantidade_input.clear()
+        # Tabela histórico
+        layout.addWidget(QLabel("📜 Últimas Movimentações:"))
+        self.tabela = QTableWidget()
+        self.tabela.setColumnCount(9)
+        self.tabela.setHorizontalHeaderLabels([
+            "Data/Hora", "Operador", "Código", "Descrição", "Tipo",
+            "Qtd", "Motivo", "Operações", "Avaliação"
+        ])
+        layout.addWidget(self.tabela)
 
-    def _exibir_mensagem(self, titulo, mensagem, tipo="info"):
-        """
-        Exibe uma mensagem para o usuário.
-        
-        Parâmetros:
-            titulo (str): Título da mensagem.
-            mensagem (str): Conteúdo da mensagem.
-            tipo (str): Tipo da mensagem ('info' ou 'warning').
-        """
-        if tipo == "info":
-            QMessageBox.information(self, titulo, mensagem)
-        elif tipo == "warning":
-            QMessageBox.warning(self, titulo, mensagem)
+        # Botões
+        btn_add  = QPushButton("➕ Adicionar Estoque")
+        btn_add.clicked.connect(self.adicionar)
 
-    def adicionar_estoque(self):
-        """
-        Valida os campos e processa a adição de quantidade ao estoque.
-        Chama a função dar_alta_ferramenta e exibe a mensagem correspondente.
-        """
-        codigo = self.codigo_input.text().strip()
-        qtd_text = self.quantidade_input.text().strip()
+        btn_sub  = QPushButton("➖ Subtrair Estoque")
+        btn_sub.clicked.connect(self.subtrair)
 
-        if not codigo:
-            self._exibir_mensagem("Erro", "Informe o código de barras da ferramenta.", "warning")
+        btn_zero = QPushButton("🗑️ Zerar Estoque")
+        btn_zero.clicked.connect(self.zerar)
+
+        btn_back = QPushButton("⬅️ Voltar")
+        btn_back.clicked.connect(lambda: self.navegacao.mostrar_tela("painel"))
+
+        for btn in (btn_add, btn_sub, btn_zero, btn_back):
+            layout.addWidget(btn)
+
+        self.setLayout(layout)
+        self.codigo_input.setFocus()
+        self._refresh_history()
+
+    def _get_rfid(self):
+        """Retorna o RFID atual; exibe erro se não estiver definido."""
+        rfid = getattr(self.navegacao, "rfid_usuario", None)
+        if not rfid:
+            QMessageBox.warning(self, "Erro", "⚠️ Usuário não identificado.")
+        return rfid
+
+    def adicionar(self):
+        """Executa ADICAO via adicionar_ferramenta."""
+        rfid = self._get_rfid()
+        if not rfid:
             return
 
-        if not qtd_text:
-            self._exibir_mensagem("Erro", "Informe a quantidade a adicionar.", "warning")
-            return
-
+        cod = self.codigo_input.text().strip()
+        qt  = self.qtde_input.text().strip()
+        if not cod:
+            return self._msg("Erro", "Informe o código da ferramenta.", "warning")
+        if not qt:
+            return self._msg("Erro", "Informe a quantidade.", "warning")
         try:
-            qtd = int(qtd_text)
+            q = int(qt)
         except ValueError:
-            self._exibir_mensagem("Erro", "A quantidade deve ser um número válido.", "warning")
+            return self._msg("Erro", "Quantidade inválida.", "warning")
+
+        resp = adicionar_ferramenta(rfid, cod, q)
+        if resp.startswith("✅"):
+            self._msg("Sucesso", resp, "info")
+            self._clear_all()
+            self._refresh_history()
+        else:
+            self._msg("Erro", resp, "warning")
+
+    def subtrair(self):
+        """Executa SUBTRACAO parcial via subtrair_ferramenta."""
+        rfid = self._get_rfid()
+        if not rfid:
             return
 
+        cod = self.codigo_input.text().strip()
+        qt  = self.qtde_input.text().strip()
+        if not cod:
+            return self._msg("Erro", "Informe o código da ferramenta.", "warning")
+        if not qt:
+            return self._msg("Erro", "Informe a quantidade.", "warning")
         try:
-            resposta = dar_alta_ferramenta(codigo, qtd)
-            if isinstance(resposta, str) and resposta.startswith("✅"):
-                self._exibir_mensagem("Sucesso", resposta, "info")
-                self._limpar_campos()
-            else:
-                self._exibir_mensagem("Erro", resposta, "warning")
-        except Exception as e:
-            self._exibir_mensagem("Erro", f"Erro ao adicionar ao estoque: {e}", "warning")
+            q = int(qt)
+        except ValueError:
+            return self._msg("Erro", "Quantidade inválida.", "warning")
 
-    def remover_estoque(self):
-        """
-        Valida o campo de código e processa a remoção (zerar) do estoque de uma ferramenta.
-        Chama a função dar_baixa_ferramenta e exibe a mensagem correspondente.
-        """
-        codigo = self.codigo_input.text().strip()
-        if not codigo:
-            self._exibir_mensagem("Erro", "Informe o código de barras da ferramenta.", "warning")
+        resp = subtrair_ferramenta(rfid, cod, q)
+        if resp.startswith("✅"):
+            self._msg("Sucesso", resp, "info")
+            self._clear_all()
+            self._refresh_history()
+        else:
+            self._msg("Erro", resp, "warning")
+
+    def zerar(self):
+        """Executa ZERAR estoque via zerar_ferramenta."""
+        rfid = self._get_rfid()
+        if not rfid:
             return
 
-        try:
-            resposta = dar_baixa_ferramenta(codigo)
-            if isinstance(resposta, str) and resposta.startswith("✅"):
-                self._exibir_mensagem("Sucesso", resposta, "info")
-                self._limpar_campos()
+        cod = self.codigo_input.text().strip()
+        if not cod:
+            return self._msg("Erro", "Informe o código da ferramenta.", "warning")
+
+        resp = zerar_ferramenta(rfid, cod)
+        if resp.startswith("✅"):
+            self._msg("Sucesso", resp, "info")
+            self._clear_all()
+            self._refresh_history()
+        else:
+            self._msg("Erro", resp, "warning")
+
+    def _on_codigo_enter(self):
+        """Ao pressionar Enter no código, busca dados e atualiza histórico."""
+        cod = self.codigo_input.text().strip()
+        if not cod:
+            self._clear_labels()
+        else:
+            dados = buscar_ferramenta_por_codigo(cod)
+            if dados:
+                self.lbl_descricao.setText(f"🔎 Descrição: {dados['nome']}")
+                self.lbl_estoque.setText(
+                    f"📦 Almoxarifado: {dados['estoque_almoxarifado']} | Ativo: {dados['estoque_ativo']}"
+                )
             else:
-                self._exibir_mensagem("Erro", resposta, "warning")
-        except Exception as e:
-            self._exibir_mensagem("Erro", f"Erro ao remover do estoque: {e}", "warning")
+                QMessageBox.warning(self, "Erro", "Ferramenta não encontrada.")
+                self._clear_labels()
+        self._refresh_history()
+
+    def _refresh_history(self):
+        """Recarrega a tabela com as últimas movimentações."""
+        registros = buscar_ultimas_movimentacoes()
+        self.tabela.setRowCount(0)
+        for linha in registros:
+            row = self.tabela.rowCount()
+            self.tabela.insertRow(row)
+            for col, val in enumerate(linha):
+                self.tabela.setItem(row, col, QTableWidgetItem(str(val)))
+
+    def _clear_all(self):
+        """Limpa campos de entrada e labels."""
+        self.codigo_input.clear()
+        self.qtde_input.clear()
+        self._clear_labels()
+
+    def _clear_labels(self):
+        """Reseta labels de descrição e estoque."""
+        self.lbl_descricao.setText("🔎 Descrição: -")
+        self.lbl_estoque.setText("📦 Almoxarifado: - | Ativo: -")
+
+    def _msg(self, title, text, kind="info"):
+        """Exibe QMessageBox de informação ou alerta."""
+        if kind == "info":
+            QMessageBox.information(self, title, text)
+        else:
+            QMessageBox.warning(self, title, text)
