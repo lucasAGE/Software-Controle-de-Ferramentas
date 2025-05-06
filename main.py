@@ -1,37 +1,44 @@
+#!/usr/bin/env python3
+"""
+main.py
+
+Inicialização do banco de dados (backup, agendamento, esquema e dados iniciais)
+e execução da interface gráfica do Sistema de Controle de Ferramentas.
+"""
+
 import sys
 import os
+import logging
+from typing import Optional
 
+from PyQt5.QtWidgets import QApplication
+
+import database.config as config
 from database.database_utils import executar_query
-from database.database import (
-    registrar_movimentacao,
-    buscar_ferramenta_por_codigo,
-    criar_tabelas
+from database.database import criar_tabelas, registrar_movimentacao as db_registrar_movimentacao, buscar_ferramenta_por_codigo
+from database.database_backup import verificar_backup
+from database.scheduler import iniciar_agendador_em_thread
+from database.initial_data import importar_ferramentas_da_planilha, preparar_dados_teste
+
+
+# Configuração básica de logs
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s"
 )
+
 
 # ----- Funções de Administração -----
 
 def registrar_usuario(nome: str, senha: str, rfid: str, tipo: str) -> str:
     """
     Registra um novo usuário no sistema.
-
-    Parâmetros:
-        nome   (str): Nome do usuário.
-        senha  (str): Senha (deve chegar já hash ou cifrada).
-        rfid   (str): RFID do usuário.
-        tipo   (str): Tipo do usuário ("admin", "operador", etc.).
-
-    Retorna:
-        str: Mensagem de sucesso ou erro.
     """
     try:
-        nome = nome.strip()
-        senha = senha.strip()
-        rfid = rfid.strip()
-        tipo = tipo.strip()
-
+        nome, senha, rfid, tipo = (campo.strip() for campo in (nome, senha, rfid, tipo))
         if not (nome and senha and rfid and tipo):
             return "⚠️ Nome, Senha, RFID e Tipo são obrigatórios!"
-
         query = """
             INSERT INTO usuarios (nome, senha, rfid, tipo)
             VALUES (?, ?, ?, ?)
@@ -39,6 +46,7 @@ def registrar_usuario(nome: str, senha: str, rfid: str, tipo: str) -> str:
         executar_query(query, (nome, senha, rfid, tipo))
         return f"✅ Usuário '{nome}' registrado com sucesso!"
     except Exception as e:
+        logger.exception("Erro ao registrar usuário")
         return f"⚠️ Erro ao registrar usuário: {e}"
 
 
@@ -51,28 +59,14 @@ def registrar_ferramenta(
 ) -> str:
     """
     Registra uma nova ferramenta no sistema.
-
-    Parâmetros:
-        nome                 (str): Nome da ferramenta.
-        codigo_barra         (str): Código de barras único.
-        estoque_almoxarifado (int): Quantidade inicial no almoxarifado.
-        estoque_ativo        (int): Quantidade inicial em uso.
-        consumivel           (str): "SIM" ou "NÃO".
-
-    Retorna:
-        str: Mensagem de sucesso ou erro.
     """
     try:
-        nome = nome.strip()
-        codigo_barra = codigo_barra.strip()
-
-        if not nome or not codigo_barra or estoque_almoxarifado < 0:
+        nome, codigo = nome.strip(), codigo_barra.strip()
+        if not nome or not codigo or estoque_almoxarifado < 0:
             return ("⚠️ Nome, código de barras e quantidade válida "
                     "para o almoxarifado são obrigatórios!")
-
         # Normaliza estoque ativo
         if isinstance(estoque_ativo, str):
-            estoque_ativo = estoque_ativo.strip()
             estoque_ativo = int(estoque_ativo) if estoque_ativo.isdigit() else 0
 
         consumivel = consumivel.strip().upper()
@@ -81,103 +75,52 @@ def registrar_ferramenta(
 
         query = """
             INSERT INTO ferramentas
-                (nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel)
+              (nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel)
             VALUES (?, ?, ?, ?, ?)
         """
         executar_query(
             query,
-            (nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel)
+            (nome, codigo, estoque_almoxarifado, estoque_ativo, consumivel)
         )
         return f"✅ Ferramenta '{nome}' registrada com sucesso!"
     except Exception as e:
+        logger.exception("Erro ao registrar ferramenta")
         return f"⚠️ Erro ao registrar ferramenta: {e}"
 
 
 def registrar_maquina(nome: str) -> str:
     """
     Registra uma nova máquina no sistema.
-
-    Parâmetros:
-        nome (str): Nome da máquina.
-
-    Retorna:
-        str: Mensagem de sucesso ou erro.
     """
     try:
         nome = nome.strip()
         if not nome:
             return "⚠️ O nome da máquina é obrigatório!"
-
         query = "INSERT INTO maquinas (nome) VALUES (?)"
         executar_query(query, (nome,))
         return f"✅ Máquina '{nome}' registrada com sucesso!"
     except Exception as e:
+        logger.exception("Erro ao registrar máquina")
         return f"⚠️ Erro ao registrar máquina: {e}"
 
 
 # ----- Funções de Movimentação -----
-
-def retirar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
-    """
-    Processa a retirada de uma ferramenta.
-    """
-    return realizar_movimentacao(rfid, codigo_barra, "RETIRADA", quantidade)
-
-
-def devolver_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
-    """
-    Processa a devolução de uma ferramenta.
-    """
-    return realizar_movimentacao(rfid, codigo_barra, "DEVOLUCAO", quantidade)
-
-
-def adicionar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
-    """
-    Incrementa estoque e registra ação 'ADICAO'.
-    """
-    return realizar_movimentacao(rfid, codigo_barra, "ADICAO", quantidade)
-
-
-def subtrair_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
-    """
-    Decrementa estoque e registra ação 'SUBTRACAO'.
-    """
-    return realizar_movimentacao(rfid, codigo_barra, "SUBTRACAO", quantidade)
-
-
-def zerar_ferramenta(rfid: str, codigo_barra: str) -> str:
-    """
-    Zera o estoque almoxarifado e registra ação 'SUBTRACAO'
-    com a quantidade total atual.
-    """
-    dados = buscar_ferramenta_por_codigo(codigo_barra)
-    if not dados:
-        return "⚠️ Ferramenta não encontrada!"
-
-    quantidade = dados["estoque_almoxarifado"]
-    if quantidade <= 0:
-        return "⚠️ Estoque já está zerado!"
-
-    return realizar_movimentacao(rfid, codigo_barra, "SUBTRACAO", quantidade)
-
 
 def realizar_movimentacao(
     rfid: str,
     codigo_barra: str,
     acao: str,
     quantidade: int = 1,
-    motivo: str = None,
-    operacoes: int = None,
-    avaliacao: int = None
+    motivo: Optional[str] = None,
+    operacoes: Optional[int] = None,
+    avaliacao: Optional[int] = None
 ) -> str:
     """
-    Processa RETIRADA, DEVOLUCAO, CONSUMO, ADICAO e SUBTRACAO,
-    delegando ao registrar_movimentacao e retornando a mensagem.
+    Lógica central de movimentações (retirada, devolução, etc.).
     """
     try:
-        rfid = rfid.strip()
-        codigo_barra = codigo_barra.strip()
-
+        rfid, codigo_barra = rfid.strip(), codigo_barra.strip()
+        # Busca ID do usuário
         result = executar_query(
             "SELECT id FROM usuarios WHERE rfid = ?",
             (rfid,),
@@ -187,7 +130,7 @@ def realizar_movimentacao(
             return "⚠️ Usuário não encontrado!"
         usuario_id = result[0][0]
 
-        resp = registrar_movimentacao(
+        resp = db_registrar_movimentacao(
             usuario_id,
             codigo_barra,
             acao,
@@ -197,31 +140,69 @@ def realizar_movimentacao(
             avaliacao
         )
         return resp.get("mensagem") if isinstance(resp, dict) else resp
+
     except Exception as e:
+        logger.exception("Erro ao realizar movimentação")
         return f"⚠️ Erro ao realizar movimentação: {e}"
 
 
-# ----- Inicialização -----
+def retirar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+    return realizar_movimentacao(rfid, codigo_barra, "RETIRADA", quantidade)
 
-def main():
+
+def devolver_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+    return realizar_movimentacao(rfid, codigo_barra, "DEVOLUCAO", quantidade)
+
+
+def adicionar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+    return realizar_movimentacao(rfid, codigo_barra, "ADICAO", quantidade)
+
+
+def subtrair_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+    return realizar_movimentacao(rfid, codigo_barra, "SUBTRACAO", quantidade)
+
+
+def zerar_ferramenta(rfid: str, codigo_barra: str) -> str:
+    dados = buscar_ferramenta_por_codigo(codigo_barra)
+    if not dados:
+        return "⚠️ Ferramenta não encontrada!"
+    qtd = dados["estoque_almoxarifado"]
+    if qtd <= 0:
+        return "⚠️ Estoque já está zerado!"
+    return realizar_movimentacao(rfid, codigo_barra, "SUBTRACAO", qtd)
+
+
+# ----- Inicialização do Banco e Interface -----
+
+def init_database() -> None:
     """
-    Inicializa o banco (backup e tabelas) e inicia a interface gráfica.
+    1) Recupera/cria backup do turno atual.
+    2) Inicia o agendador de backups.
+    3) Se for primeira execução, cria esquema e importa dados iniciais.
     """
+    base_db = config.DATABASE_CAMINHO
     try:
-        from database.database_backup import verificar_backup
-        from database import config
+        novo_path = verificar_backup()
+        config.DATABASE_CAMINHO = novo_path
+        iniciar_agendador_em_thread()
 
-        config.DATABASE_CAMINHO = verificar_backup()
-
-        if not os.path.exists(config.DATABASE_CAMINHO):
-            print("📌 Banco de dados não encontrado. Criando novo...")
+        if not os.path.exists(base_db):
+            logger.info("Primeiro uso: criando esquema e importando dados iniciais…")
             criar_tabelas()
+            importar_ferramentas_da_planilha()
+            preparar_dados_teste()
         else:
-            print(f"✅ Banco pronto: {config.DATABASE_CAMINHO}")
-    except Exception as e:
-        print(f"⚠️ Erro na inicialização do banco: {e}")
+            logger.info("Banco pronto em %s", config.DATABASE_CAMINHO)
+    except Exception:
+        logger.exception("Falha na inicialização do banco")
 
-    from PyQt5.QtWidgets import QApplication
+
+def main() -> int:
+    """
+    Ponto de entrada: prepara banco e executa a interface Qt.
+    """
+    init_database()
+
     from interface.navegacao import Navegacao
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -229,8 +210,9 @@ def main():
     janela.setWindowTitle("Controle de Ferramentas")
     janela.resize(800, 600)
     janela.show()
-    sys.exit(app.exec_())
+
+    return app.exec_()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
