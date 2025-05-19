@@ -3,18 +3,15 @@ import sqlite3
 import hashlib
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
-    QFormLayout, QMessageBox, QComboBox
+    QFormLayout, QMessageBox, QComboBox, QHBoxLayout
 )
 from PyQt5.QtGui import QIntValidator
 from PyQt5.QtCore import Qt
 
 from main import registrar_usuario, registrar_ferramenta, registrar_maquina
+from database.database_utils import executar_query
 
 def hash_senha(senha):
-    """
-    Gera um hash SHA-256 para a senha informada.
-    Em produção, considere utilizar bibliotecas como o bcrypt.
-    """
     return hashlib.sha256(senha.encode('utf-8')).hexdigest()
 
 class TelaCadastros(QWidget):
@@ -38,18 +35,15 @@ class TelaCadastros(QWidget):
         self.layout.addWidget(label_titulo)
 
     def build_user_section(self):
-        """Constrói a seção de cadastro de usuários."""
         label_usuarios = QLabel("📅 Usuários")
         label_usuarios.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(label_usuarios)
 
-        # Criando os campos de cadastro de usuário
         self.nome_usuario_input = QLineEdit()
         self.senha_usuario_input = QLineEdit()
         self.senha_usuario_input.setEchoMode(QLineEdit.Password)
         self.rfid_usuario_input = QLineEdit()
         self.tipo_usuario_input = QComboBox()
-        # Exemplo de tipos; ajuste conforme necessário
         self.tipo_usuario_input.addItems(["admin", "usuario"])
 
         form_usuario = QFormLayout()
@@ -59,29 +53,30 @@ class TelaCadastros(QWidget):
         form_usuario.addRow("Tipo:", self.tipo_usuario_input)
         self.layout.addLayout(form_usuario)
 
+        botoes_usuario = QHBoxLayout()
         btn_usuario = QPushButton("Adicionar Usuário")
         btn_usuario.clicked.connect(self.adicionar_usuario)
-        self.layout.addWidget(btn_usuario)
+        btn_remover_usuario = QPushButton("Remover Usuário")
+        btn_remover_usuario.clicked.connect(self.remover_usuario)
+        botoes_usuario.addWidget(btn_usuario)
+        botoes_usuario.addWidget(btn_remover_usuario)
+        self.layout.addLayout(botoes_usuario)
 
     def build_tool_section(self):
-        """Constrói a seção de cadastro de ferramentas."""
         label_ferramentas = QLabel("🔧 Ferramentas")
         label_ferramentas.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(label_ferramentas)
 
         self.nome_ferramenta_input = QLineEdit()
         self.codigo_barra_input = QLineEdit()
-        # Campo que antes era "Quantidade" agora representa o "Estoque Almoxarifado"
         self.quantidade_input = QLineEdit()
         self.quantidade_input.setValidator(QIntValidator(0, 10000, self))
-
-        # Novos campos para refletir a estrutura do banco
         self.estoque_ativo_input = QLineEdit()
         self.estoque_ativo_input.setValidator(QIntValidator(0, 10000, self))
         self.estoque_ativo_input.setPlaceholderText("Opcional (default: 0)")
 
         self.consumivel_input = QComboBox()
-        self.consumivel_input.addItems(["NÃO", "SIM"])  # Padrão é "NÃO"
+        self.consumivel_input.addItems(["NÃO", "SIM"])
 
         form_ferramenta = QFormLayout()
         form_ferramenta.addRow("Nome:", self.nome_ferramenta_input)
@@ -91,37 +86,40 @@ class TelaCadastros(QWidget):
         form_ferramenta.addRow("Consumível:", self.consumivel_input)
         self.layout.addLayout(form_ferramenta)
 
+        botoes_ferramenta = QHBoxLayout()
         btn_ferramenta = QPushButton("Adicionar Ferramenta")
         btn_ferramenta.clicked.connect(self.adicionar_ferramenta)
-        self.layout.addWidget(btn_ferramenta)
+        btn_remover_ferramenta = QPushButton("Remover Ferramenta")
+        btn_remover_ferramenta.clicked.connect(self.remover_ferramenta)
+        botoes_ferramenta.addWidget(btn_ferramenta)
+        botoes_ferramenta.addWidget(btn_remover_ferramenta)
+        self.layout.addLayout(botoes_ferramenta)
 
     def build_machine_section(self):
-        """Constrói a seção de cadastro de máquinas."""
         label_maquinas = QLabel("🛠️ Máquinas")
         label_maquinas.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(label_maquinas)
 
         self.nome_maquina_input = QLineEdit()
-        # Se o campo "localizacao" não for necessário, ele não aparece no cadastro.
         form_maquina = QFormLayout()
         form_maquina.addRow("Nome:", self.nome_maquina_input)
         self.layout.addLayout(form_maquina)
 
+        botoes_maquina = QHBoxLayout()
         btn_maquina = QPushButton("Adicionar Máquina")
         btn_maquina.clicked.connect(self.adicionar_maquina)
-        self.layout.addWidget(btn_maquina)
+        btn_remover_maquina = QPushButton("Remover Máquina")
+        btn_remover_maquina.clicked.connect(self.remover_maquina)
+        botoes_maquina.addWidget(btn_maquina)
+        botoes_maquina.addWidget(btn_remover_maquina)
+        self.layout.addLayout(botoes_maquina)
 
     def build_back_button(self):
-        """Cria o botão para retornar à tela anterior."""
         btn_voltar = QPushButton("⬅️ Voltar")
         btn_voltar.clicked.connect(lambda: self.navegacao.mostrar_tela("painel"))
         self.layout.addWidget(btn_voltar)
 
     def validate_fields(self, fields):
-        """
-        Valida os campos informados.
-        fields: lista de tuplas (nome_do_campo, QLineEdit)
-        """
         for field_name, field in fields:
             if not field.text().strip():
                 QMessageBox.warning(self, "Erro", f"⚠️ Preencha o campo '{field_name}' corretamente!")
@@ -129,14 +127,12 @@ class TelaCadastros(QWidget):
         return True
 
     def show_message(self, title, message, info=True):
-        """Exibe uma mensagem de sucesso ou de erro."""
         if info:
             QMessageBox.information(self, title, message)
         else:
             QMessageBox.warning(self, title, message)
 
     def adicionar_usuario(self):
-        # Valida os campos obrigatórios (nome, senha e RFID)
         if not self.validate_fields([("Nome", self.nome_usuario_input),
                                      ("Senha", self.senha_usuario_input),
                                      ("RFID", self.rfid_usuario_input)]):
@@ -146,12 +142,14 @@ class TelaCadastros(QWidget):
         senha = self.senha_usuario_input.text().strip()
         rfid = self.rfid_usuario_input.text().strip()
         tipo = self.tipo_usuario_input.currentText().strip()
-
-        # Aplica hash na senha antes de registrar
         senha_hash = hash_senha(senha)
 
+        ja_existe = executar_query("SELECT 1 FROM usuarios WHERE nome = ?", (nome,), fetch=True)
+        if ja_existe:
+            self.show_message("Erro", f"⚠️ Usuário '{nome}' já existe.", info=False)
+            return
+
         try:
-            # Registrar usuário com os quatro parâmetros: nome, senha_hash, rfid e tipo
             resposta = registrar_usuario(nome, senha_hash, rfid, tipo)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar usuário: {str(e)}", info=False)
@@ -165,8 +163,21 @@ class TelaCadastros(QWidget):
         else:
             self.show_message("Erro", resposta, info=False)
 
+    def remover_usuario(self):
+        nome = self.nome_usuario_input.text().strip()
+        if not nome:
+            self.show_message("Erro", "Informe o nome do usuário a ser removido.", info=False)
+            return
+
+        existe = executar_query("SELECT 1 FROM usuarios WHERE nome = ?", (nome,), fetch=True)
+        if not existe:
+            self.show_message("Erro", f"⚠️ Usuário '{nome}' não encontrado.", info=False)
+            return
+
+        executar_query("DELETE FROM usuarios WHERE nome = ?", (nome,))
+        self.show_message("Sucesso", f"Usuário '{nome}' removido com sucesso.")
+
     def adicionar_ferramenta(self):
-        # Valida os campos obrigatórios para ferramentas
         if not self.validate_fields([("Nome", self.nome_ferramenta_input),
                                      ("Código de Barras", self.codigo_barra_input),
                                      ("Estoque Almoxarifado", self.quantidade_input)]):
@@ -180,17 +191,17 @@ class TelaCadastros(QWidget):
             self.show_message("Erro", "Estoque Almoxarifado deve ser um número inteiro.", info=False)
             return
 
-        quantidade = int(quantidade_str)
+        ja_existe = executar_query("SELECT 1 FROM ferramentas WHERE codigo_barra = ?", (codigo,), fetch=True)
+        if ja_existe:
+            self.show_message("Erro", f"⚠️ Ferramenta com código '{codigo}' já existe.", info=False)
+            return
 
-        # Para estoque_ativo: se não informado, usa 0
+        quantidade = int(quantidade_str)
         estoque_ativo_str = self.estoque_ativo_input.text().strip()
         estoque_ativo = int(estoque_ativo_str) if estoque_ativo_str.isdigit() else 0
         consumivel = self.consumivel_input.currentText().strip()
 
         try:
-            # Registrar ferramenta com os cinco parâmetros:
-            # - estoque_almoxarifado: valor informado no campo "quantidade" (renomeado no rótulo)
-            # - estoque_ativo: conforme informado ou padrão 0
             resposta = registrar_ferramenta(nome, codigo, quantidade, estoque_ativo, consumivel)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar ferramenta: {str(e)}", info=False)
@@ -205,15 +216,32 @@ class TelaCadastros(QWidget):
         else:
             self.show_message("Erro", resposta, info=False)
 
+    def remover_ferramenta(self):
+        codigo = self.codigo_barra_input.text().strip()
+        if not codigo:
+            self.show_message("Erro", "Informe o código de barras da ferramenta a ser removida.", info=False)
+            return
+
+        existe = executar_query("SELECT 1 FROM ferramentas WHERE codigo_barra = ?", (codigo,), fetch=True)
+        if not existe:
+            self.show_message("Erro", f"⚠️ Ferramenta com código '{codigo}' não encontrada.", info=False)
+            return
+
+        executar_query("DELETE FROM ferramentas WHERE codigo_barra = ?", (codigo,))
+        self.show_message("Sucesso", f"Ferramenta com código '{codigo}' removida com sucesso.")
+
     def adicionar_maquina(self):
-        # Valida o campo obrigatório para máquina (apenas nome)
         if not self.validate_fields([("Nome", self.nome_maquina_input)]):
             return
 
         nome = self.nome_maquina_input.text().strip()
 
+        ja_existe = executar_query("SELECT 1 FROM maquinas WHERE nome = ?", (nome,), fetch=True)
+        if ja_existe:
+            self.show_message("Erro", f"⚠️ Máquina '{nome}' já existe.", info=False)
+            return
+
         try:
-            # Registrar máquina usando somente o nome, já que o campo localização foi removido
             resposta = registrar_maquina(nome)
         except Exception as e:
             self.show_message("Erro", f"Erro ao registrar máquina: {str(e)}", info=False)
@@ -224,3 +252,17 @@ class TelaCadastros(QWidget):
             self.nome_maquina_input.clear()
         else:
             self.show_message("Erro", resposta, info=False)
+
+    def remover_maquina(self):
+        nome = self.nome_maquina_input.text().strip()
+        if not nome:
+            self.show_message("Erro", "Informe o nome da máquina a ser removida.", info=False)
+            return
+
+        existe = executar_query("SELECT 1 FROM maquinas WHERE nome = ?", (nome,), fetch=True)
+        if not existe:
+            self.show_message("Erro", f"⚠️ Máquina '{nome}' não encontrada.", info=False)
+            return
+
+        executar_query("DELETE FROM maquinas WHERE nome = ?", (nome,))
+        self.show_message("Sucesso", f"Máquina '{nome}' removida com sucesso.")
