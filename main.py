@@ -3,7 +3,7 @@
 main.py
 
 Inicialização do banco de dados (backup, agendamento, esquema e dados iniciais)
-e execução da interface gráfica do Sistema de Controle de Ferramentas.
+ e execução da interface gráfica do Sistema de Controle de Ferramentas.
 """
 
 import sys
@@ -15,7 +15,11 @@ from PyQt5.QtWidgets import QApplication
 
 import database.config as config
 from database.database_utils import executar_query
-from database.database import criar_tabelas, registrar_movimentacao as db_registrar_movimentacao, buscar_ferramenta_por_codigo
+from database.database import (
+    criar_tabelas,
+    registrar_movimentacao as db_registrar_movimentacao,
+    buscar_ferramenta_por_codigo
+)
 from database.database_backup import verificar_backup
 from database.scheduler import iniciar_agendador_em_thread
 from database.initial_data import importar_ferramentas_da_planilha, preparar_dados_teste
@@ -39,10 +43,10 @@ def registrar_usuario(nome: str, senha: str, rfid: str, tipo: str) -> str:
         nome, senha, rfid, tipo = (campo.strip() for campo in (nome, senha, rfid, tipo))
         if not (nome and senha and rfid and tipo):
             return "⚠️ Nome, Senha, RFID e Tipo são obrigatórios!"
-        query = """
-            INSERT INTO usuarios (nome, senha, rfid, tipo)
-            VALUES (?, ?, ?, ?)
-        """
+        query = (
+            "INSERT INTO usuarios (nome, senha, rfid, tipo)"
+            " VALUES (?, ?, ?, ?)"
+        )
         executar_query(query, (nome, senha, rfid, tipo))
         return f"✅ Usuário '{nome}' registrado com sucesso!"
     except Exception as e:
@@ -54,7 +58,6 @@ def registrar_ferramenta(
     nome: str,
     codigo_barra: str,
     estoque_almoxarifado: int,
-    estoque_ativo: int,
     consumivel: str
 ) -> str:
     """
@@ -63,25 +66,17 @@ def registrar_ferramenta(
     try:
         nome, codigo = nome.strip(), codigo_barra.strip()
         if not nome or not codigo or estoque_almoxarifado < 0:
-            return ("⚠️ Nome, código de barras e quantidade válida "
-                    "para o almoxarifado são obrigatórios!")
-        # Normaliza estoque ativo
-        if isinstance(estoque_ativo, str):
-            estoque_ativo = int(estoque_ativo) if estoque_ativo.isdigit() else 0
-
+            return ("⚠️ Nome, código de barras e quantidade válida para o almoxarifado são obrigatórios!")
         consumivel = consumivel.strip().upper()
         if consumivel not in ("SIM", "NÃO"):
             return "⚠️ O campo Consumível deve ser 'SIM' ou 'NÃO'!"
 
-        query = """
-            INSERT INTO ferramentas
-              (nome, codigo_barra, estoque_almoxarifado, estoque_ativo, consumivel)
-            VALUES (?, ?, ?, ?, ?)
-        """
-        executar_query(
-            query,
-            (nome, codigo, estoque_almoxarifado, estoque_ativo, consumivel)
+        query = (
+            "INSERT INTO ferramentas"
+            " (nome, codigo_barra, estoque_almoxarifado, consumivel)"
+            " VALUES (?, ?, ?, ?)"
         )
+        executar_query(query, (nome, codigo, estoque_almoxarifado, consumivel))
         return f"✅ Ferramenta '{nome}' registrada com sucesso!"
     except Exception as e:
         logger.exception("Erro ao registrar ferramenta")
@@ -114,9 +109,9 @@ def realizar_movimentacao(
     motivo: Optional[str] = None,
     operacoes: Optional[int] = None,
     avaliacao: Optional[int] = None
-) -> str:
+) -> dict:
     """
-    Lógica central de movimentações (retirada, devolução, etc.).
+    Lógica central de movimentações (retirada, devolução, consumo, etc.).
     """
     try:
         rfid, codigo_barra = rfid.strip(), codigo_barra.strip()
@@ -127,7 +122,7 @@ def realizar_movimentacao(
             fetch=True
         )
         if not result:
-            return "⚠️ Usuário não encontrado!"
+            return {"status": False, "mensagem": "⚠️ Usuário não encontrado!"}
         usuario_id = result[0][0]
 
         resp = db_registrar_movimentacao(
@@ -139,36 +134,35 @@ def realizar_movimentacao(
             operacoes,
             avaliacao
         )
-        return resp.get("mensagem") if isinstance(resp, dict) else resp
-
+        return resp
     except Exception as e:
         logger.exception("Erro ao realizar movimentação")
-        return f"⚠️ Erro ao realizar movimentação: {e}"
+        return {"status": False, "mensagem": f"⚠️ Erro ao realizar movimentação: {e}"}
 
 
-def retirar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+def retirar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> dict:
     return realizar_movimentacao(rfid, codigo_barra, "RETIRADA", quantidade)
 
 
-def devolver_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+def devolver_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> dict:
     return realizar_movimentacao(rfid, codigo_barra, "DEVOLUCAO", quantidade)
 
 
-def adicionar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+def adicionar_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> dict:
     return realizar_movimentacao(rfid, codigo_barra, "ADICAO", quantidade)
 
 
-def subtrair_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> str:
+def subtrair_ferramenta(rfid: str, codigo_barra: str, quantidade: int = 1) -> dict:
     return realizar_movimentacao(rfid, codigo_barra, "SUBTRACAO", quantidade)
 
 
-def zerar_ferramenta(rfid: str, codigo_barra: str) -> str:
+def zerar_ferramenta(rfid: str, codigo_barra: str) -> dict:
     dados = buscar_ferramenta_por_codigo(codigo_barra)
     if not dados:
-        return "⚠️ Ferramenta não encontrada!"
+        return {"status": False, "mensagem": "⚠️ Ferramenta não encontrada!"}
     qtd = dados["estoque_almoxarifado"]
     if qtd <= 0:
-        return "⚠️ Estoque já está zerado!"
+        return {"status": False, "mensagem": "⚠️ Estoque já está zerado!"}
     return realizar_movimentacao(rfid, codigo_barra, "SUBTRACAO", qtd)
 
 
@@ -210,7 +204,6 @@ def main() -> int:
     janela.setWindowTitle("Controle de Ferramentas")
     janela.resize(800, 600)
     janela.show()
-
     return app.exec_()
 
 

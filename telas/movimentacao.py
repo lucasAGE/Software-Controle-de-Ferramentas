@@ -1,11 +1,13 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit, QFormLayout, 
-    QMessageBox, QSpinBox, QTableWidget, QTableWidgetItem, QDialog, QDialogButtonBox
+    QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit, QFormLayout,
+    QMessageBox, QSpinBox, QTableWidget, QTableWidgetItem, QDialog,
+    QDialogButtonBox, QHeaderView
 )
 from PyQt5.QtCore import Qt
 
 from main import realizar_movimentacao
 from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
+from database.database_utils import buscar_estoque_ativo_usuario
 
 
 class DialogoConsumo(QDialog):
@@ -30,7 +32,6 @@ class DialogoConsumo(QDialog):
             "Erro de Fundição": QPushButton("🟡 Erro de Fundição"),
             "Uso Incorreto": QPushButton("🔵 Uso Incorreto")
         }
-
         for motivo, botao in self.motivos.items():
             botao.setCheckable(True)
             botao.clicked.connect(lambda checked, m=motivo: self.selecionar_motivo(m))
@@ -56,7 +57,6 @@ class DialogoConsumo(QDialog):
 
     def selecionar_motivo(self, motivo):
         self.motivo_selecionado = motivo
-        # Desmarca os outros botões
         for m, b in self.motivos.items():
             b.setChecked(m == motivo)
 
@@ -67,297 +67,360 @@ class DialogoConsumo(QDialog):
         self.accept()
 
     def get_values(self):
-        """
-        Retorna os valores: motivo selecionado, número de operações e avaliação.
-        """
         return self.motivo_selecionado, self.spin_operacoes.value(), self.spin_avaliacao.value()
 
 
 class TelaMovimentacao(QWidget):
     """
     Tela de movimentação de ferramentas.
-
-    Permite a retirada, devolução e consumo de ferramentas, busca os dados da peça 
-    e exibe as últimas movimentações em uma tabela.
+    Permite retirada, devolução e consumo, exibe últimas movimentações e estoque ativo do usuário.
     """
     def __init__(self, navegacao, rfid_usuario):
-        """
-        Inicializa a tela de movimentação.
-
-        Parâmetros:
-            navegacao (object): Objeto responsável pela navegação entre telas.
-            rfid_usuario (str): RFID do usuário atual.
-        """
         super().__init__()
         self.navegacao = navegacao
         self.rfid_usuario = rfid_usuario
-        self._init_ui()
+        self.dados_ferramenta = None
         self.acao_selecionada = None
+        self._init_ui()
 
     def _init_ui(self):
-        """
-        Configura a interface do usuário, organizando os componentes em layout.
-        """
         self.layout = QVBoxLayout()
-
-        # Adiciona o título
         self.layout.addWidget(self._criar_label_titulo())
-
-        # Adiciona o formulário de entrada
         self.layout.addLayout(self._criar_formulario())
-
-        # Adiciona os botões de movimentação e navegação
         self.layout.addLayout(self._criar_botoes())
 
-        # Adiciona a tabela de últimas movimentações
+        # Tabela de últimas movimentações
         self.layout.addWidget(QLabel("📜 Últimas Movimentações:"))
-        self.layout.addWidget(self._criar_tabela())
+        self.layout.addWidget(self._criar_tabela_logs())
+
+        # Tabela de estoque ativo
+        self.layout.addWidget(QLabel("🎒 Estoque Ativo do Usuário:"))
+        self.layout.addWidget(self._criar_tabela_estoque_ativo())
 
         self.setLayout(self.layout)
         self.carregar_ultimas_movimentacoes()
+        self.carregar_estoque_ativo()
 
     def _criar_label_titulo(self):
-        """
-        Cria e retorna o rótulo de título da tela.
-        """
         label = QLabel("📦 Movimentação de Ferramentas")
         label.setAlignment(Qt.AlignCenter)
         return label
 
     def _criar_formulario(self):
-        """
-        Cria e retorna o layout de formulário para entrada dos dados da ferramenta.
-        """
-        form_layout = QFormLayout()
-        
+        form = QFormLayout()
         self.codigo_barras_input = QLineEdit()
         self.codigo_barras_input.setPlaceholderText("🔹 Escaneie o código de barras da ferramenta")
         self.codigo_barras_input.returnPressed.connect(self.buscar_dados_peca)
-        form_layout.addRow("🔖 Código de Barras:", self.codigo_barras_input)
+        form.addRow("🔖 Código de Barras:", self.codigo_barras_input)
 
         self.lbl_descricao = QLabel("🔎 Descrição: -")
-        # Atualizado para refletir a nova nomenclatura: 'estoque_almoxarifado'
         self.lbl_estoque = QLabel("📦 Almoxarifado: - | Ativo: -")
         self.lbl_consumivel = QLabel("🔁 Consumível: -")
         self.spin_quantidade = QSpinBox()
         self.spin_quantidade.setMinimum(1)
         self.spin_quantidade.setMaximum(999)
 
-        form_layout.addRow("📄 Descrição:", self.lbl_descricao)
-        form_layout.addRow("📊 Estoque:", self.lbl_estoque)
-        form_layout.addRow("🔢 Quantidade:", self.spin_quantidade)
-        form_layout.addRow("🔁 Consumível:", self.lbl_consumivel)
+        form.addRow(self.lbl_descricao)
+        form.addRow(self.lbl_estoque)
+        form.addRow("🔢 Quantidade:", self.spin_quantidade)
+        form.addRow(self.lbl_consumivel)
 
         self.label_status = QLabel("")
-        self.label_status.setStyleSheet("color: black; font-weight: normal;")
-        form_layout.addRow("", self.label_status)
-        
-        return form_layout
+        form.addRow(self.label_status)
+        return form
 
     def _criar_botoes(self):
-        """
-        Cria e retorna um layout contendo os botões de movimentação e navegação.
-        """
-        layout_botoes = QVBoxLayout()
-
+        vbox = QVBoxLayout()
         btn_retirar = QPushButton("🔴 Retirar Ferramenta")
-        btn_retirar.clicked.connect(lambda: self._setar_acao_e_mover("RETIRADA"))
-        layout_botoes.addWidget(btn_retirar)
+        btn_retirar.clicked.connect(lambda: self._executar_acao("RETIRADA"))
+        vbox.addWidget(btn_retirar)
 
         btn_devolver = QPushButton("🟢 Devolver Ferramenta")
-        btn_devolver.clicked.connect(lambda: self._setar_acao_e_mover("DEVOLUCAO"))
-        layout_botoes.addWidget(btn_devolver)
+        btn_devolver.clicked.connect(lambda: self._executar_acao("DEVOLUCAO"))
+        vbox.addWidget(btn_devolver)
 
-        # Botão de consumo como atributo, começa desabilitado
         self.btn_consumir = QPushButton("🔶 Consumir Ferramenta")
-        self.btn_consumir.clicked.connect(lambda: self._setar_acao_e_mover("CONSUMO"))
+        self.btn_consumir.clicked.connect(lambda: self._executar_acao("CONSUMO"))
         self.btn_consumir.setEnabled(False)
-        layout_botoes.addWidget(self.btn_consumir)
+        vbox.addWidget(self.btn_consumir)
 
         btn_voltar = QPushButton("⬅️ Voltar")
         btn_voltar.clicked.connect(lambda: self.navegacao.mostrar_tela("painel"))
-        layout_botoes.addWidget(btn_voltar)
+        vbox.addWidget(btn_voltar)
+        return vbox
 
-        return layout_botoes
-
-    def _setar_acao_e_mover(self, acao):
-        """
-        Define a ação selecionada e executa a movimentação correspondente.
-        """
-        self.acao_selecionada = acao
-        self.realizar_movimentacao_gui(acao)
-
-    def _criar_tabela(self):
-        """
-        Cria e retorna a tabela que exibirá as últimas movimentações.
-        """
-        self.tabela = QTableWidget()
-        # Mantém as colunas para exibição de logs; 
-        # Note que esta tabela exibe o campo 'quantidade' (movimentada) da tabela logs.
-        self.tabela.setColumnCount(9)
-        self.tabela.setHorizontalHeaderLabels([
+    def _criar_tabela_logs(self):
+        self.tabela_logs = QTableWidget()
+        self.tabela_logs.setColumnCount(9)
+        self.tabela_logs.setHorizontalHeaderLabels([
             "Data/Hora", "Operador", "Código", "Descrição", "Tipo", 
             "Qtd", "Motivo", "Operações", "Avaliação"
         ])
-        return self.tabela
+        return self.tabela_logs
 
-    def _exibir_mensagem(self, titulo, mensagem, tipo="info"):
-        """
-        Exibe uma mensagem ao usuário utilizando QMessageBox.
+    def _criar_tabela_estoque_ativo(self):
+        self.tabela_ativo = QTableWidget()
+        self.tabela_ativo.setColumnCount(3)
+        self.tabela_ativo.setHorizontalHeaderLabels(["Código", "Descrição", "Qtd Ativa"])
+        header = self.tabela_ativo.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        return self.tabela_ativo
 
-        Parâmetros:
-            titulo (str): Título da mensagem.
-            mensagem (str): Conteúdo da mensagem.
-            tipo (str): Tipo de mensagem ('info' ou 'warning').
-        """
-        if tipo == "info":
-            QMessageBox.information(self, titulo, mensagem)
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit, QFormLayout,
+    QMessageBox, QSpinBox, QTableWidget, QTableWidgetItem, QDialog, QDialogButtonBox
+)
+from PyQt5.QtCore import Qt
+
+from main import realizar_movimentacao
+from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
+from database.database_utils import buscar_estoque_ativo_usuario
+
+
+class DialogoConsumo(QDialog):
+    """
+    Popup para registrar os dados adicionais no consumo de um item consumível.
+    Agora o motivo é escolhido entre opções fixas.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Registrar Consumo")
+        self.setModal(True)
+        self.motivo_selecionado = None
+        self.init_ui()
+
+    def init_ui(self):
+        self.layout = QFormLayout(self)
+        # Botões para motivo
+        self.motivos = {
+            "Desgaste Natural": QPushButton("🟢 Desgaste Natural"),
+            "Quebra Prematura": QPushButton("🔴 Quebra Prematura"),
+            "Erro de Fundição": QPushButton("🟡 Erro de Fundição"),
+            "Uso Incorreto": QPushButton("🔵 Uso Incorreto")
+        }
+        for motivo, botao in self.motivos.items():
+            botao.setCheckable(True)
+            botao.clicked.connect(lambda _, m=motivo: self.selecionar_motivo(m))
+            self.layout.addRow(botao)
+        # Campo de operações
+        self.spin_operacoes = QSpinBox()
+        self.spin_operacoes.setMinimum(1)
+        self.spin_operacoes.setMaximum(999)
+        self.layout.addRow("Número de Operações Totais:", self.spin_operacoes)
+        # Campo de avaliação
+        self.spin_avaliacao = QSpinBox()
+        self.spin_avaliacao.setMinimum(1)
+        self.spin_avaliacao.setMaximum(5)
+        self.layout.addRow("Avaliação (1-5):", self.spin_avaliacao)
+        # Botões OK/Cancelar
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.button_box.accepted.connect(self.validar_confirmar)
+        self.button_box.rejected.connect(self.reject)
+        self.layout.addWidget(self.button_box)
+
+    def selecionar_motivo(self, motivo):
+        self.motivo_selecionado = motivo
+        for m, b in self.motivos.items():
+            b.setChecked(m == motivo)
+
+    def validar_confirmar(self):
+        if not self.motivo_selecionado:
+            QMessageBox.warning(self, "Erro", "⚠️ Selecione um motivo para o consumo.")
+            return
+        self.accept()
+
+    def get_values(self):
+        return self.motivo_selecionado, self.spin_operacoes.value(), self.spin_avaliacao.value()
+
+
+class TelaMovimentacao(QWidget):
+    """
+    Tela de movimentação de ferramentas.
+    Permite retirada, devolução e consumo, exibe últimas movimentações e estoque ativo do usuário.
+    """
+    def __init__(self, navegacao, rfid_usuario):
+        super().__init__()
+        self.navegacao = navegacao
+        self.rfid_usuario = rfid_usuario
+        self.dados_ferramenta = None
+        self._init_ui()
+
+
+    def atualizar_tela(self):
+        # Recarrega sempre que a tela for exibida
+        self.carregar_ultimas_movimentacoes()
+        self.carregar_estoque_ativo()
+
+    def _init_ui(self):
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self._criar_label_titulo())
+        self.layout.addLayout(self._criar_formulario())
+        self.layout.addLayout(self._criar_botoes())
+        self.layout.addWidget(QLabel("📜 Últimas Movimentações:"))
+        self.layout.addWidget(self._criar_tabela_logs())
+        self.layout.addWidget(QLabel("🎒 Estoque Ativo do Usuário:"))
+        self.layout.addWidget(self._criar_tabela_estoque_ativo())
+        self.setLayout(self.layout)
+        self.carregar_ultimas_movimentacoes()
+        self.carregar_estoque_ativo()
+
+    def _criar_label_titulo(self):
+        label = QLabel("📦 Movimentação de Ferramentas")
+        label.setAlignment(Qt.AlignCenter)
+        return label
+
+    def _criar_formulario(self):
+        form = QFormLayout()
+        self.codigo_input = QLineEdit()
+        self.codigo_input.setPlaceholderText("🔹 Escaneie o código de barras")
+        self.codigo_input.returnPressed.connect(self.buscar_dados_peca)
+        form.addRow("Código de Barras:", self.codigo_input)
+        self.lbl_descricao = QLabel("🔎 Descrição: -")
+        self.lbl_estoque = QLabel("📦 Almoxarifado: - | Ativo: -")
+        self.lbl_consumivel = QLabel("🔁 Consumível: -")
+        self.spin_qtd = QSpinBox()
+        self.spin_qtd.setMinimum(1)
+        self.spin_qtd.setMaximum(999)
+        form.addRow(self.lbl_descricao)
+        form.addRow(self.lbl_estoque)
+        form.addRow("Quantidade:", self.spin_qtd)
+        form.addRow(self.lbl_consumivel)
+        self.label_status = QLabel("")
+        form.addRow(self.label_status)
+        return form
+
+    def _criar_botoes(self):
+        v = QVBoxLayout()
+        btn_r = QPushButton("🔴 Retirar")
+        btn_r.clicked.connect(lambda: self._executar_acao('RETIRADA'))
+        v.addWidget(btn_r)
+        btn_d = QPushButton("🟢 Devolver")
+        btn_d.clicked.connect(lambda: self._executar_acao('DEVOLUCAO'))
+        v.addWidget(btn_d)
+        self.btn_c = QPushButton("🔶 Consumir")
+        self.btn_c.clicked.connect(lambda: self._executar_acao('CONSUMO'))
+        self.btn_c.setEnabled(False)
+        v.addWidget(self.btn_c)
+        btn_volt = QPushButton("⬅️ Voltar")
+        btn_volt.clicked.connect(lambda: self.navegacao.mostrar_tela('painel', self.rfid_usuario))
+        v.addWidget(btn_volt)
+        return v
+
+    def _criar_tabela_logs(self):
+        self.table_logs = QTableWidget()
+        self.table_logs.setColumnCount(9)
+        self.table_logs.setHorizontalHeaderLabels([
+            "Data/Hora","Operador","Código","Descrição",
+            "Tipo","Qtd","Motivo","Operações","Avaliação"
+        ])
+        return self.table_logs
+
+    def _criar_tabela_estoque_ativo(self):
+        self.table_ativo = QTableWidget()
+        self.table_ativo.setColumnCount(3)
+        self.table_ativo.setHorizontalHeaderLabels(["Código","Descrição","Qtd Ativa"])
+        return self.table_ativo
+
+    def _exibir_mensagem(self, t, m, tipo='info'):
+        if tipo=='info':
+            QMessageBox.information(self,t,m)
         else:
-            QMessageBox.warning(self, titulo, mensagem)
+            QMessageBox.warning(self,t,m)
 
     def validar_campos(self):
-        """
-        Valida os campos de entrada, garantindo que o código de barras esteja preenchido.
-
-        Retorna:
-            str ou None: O código de barras se válido; caso contrário, None.
-        """
-        codigo_barras = self.codigo_barras_input.text().strip()
-        if not codigo_barras:
-            self._exibir_mensagem("Erro", "⚠️ Nenhum código de barras foi inserido!", "warning")
+        cod = self.codigo_input.text().strip()
+        if not cod:
+            self._exibir_mensagem("Erro","Insira um código!",'warning')
             return None
-        return codigo_barras
+        return cod
 
     def buscar_dados_peca(self):
-        """
-        Busca os dados da ferramenta a partir do código de barras e atualiza os campos:
-        - Descrição
-        - Estoque do Almoxarifado e Estoque Ativo
-        - Status de consumível
-        Também prepara a interface para a movimentação.
-        """
-        codigo = self.codigo_barras_input.text().strip()
-        if not codigo:
+        cod = self.validar_campos()
+        if not cod: return
+        d = buscar_ferramenta_por_codigo(cod)
+        if not d:
+            self._exibir_mensagem("Erro","Ferramenta não encontrada.",'warning')
+            self._limpar_campos()
             return
+        self.dados_ferramenta = {'id':d['id'],'nome':d['nome'],'estoque_almoxarifado':d['estoque_almoxarifado'],'consumivel':d['consumivel']}
+        ativos = buscar_estoque_ativo_usuario(self.rfid_usuario)
+        sal = next((r[3] for r in ativos if r[0]==d['id']),0)
+        self.lbl_descricao.setText(f"🔎 Descrição: {d['nome']}")
+        self.lbl_estoque.setText(f"📦 Almoxarifado: {d['estoque_almoxarifado']} | Ativo: {sal}")
+        self.lbl_consumivel.setText(d['consumivel'])
+        self.spin_qtd.setValue(1)
+        self.btn_c.setEnabled(d['consumivel']=='SIM')
 
-        dados = buscar_ferramenta_por_codigo(codigo)
-        if dados:
-            self.lbl_descricao.setText(f"🔎 Descrição: {dados['nome']}")
-            self.lbl_estoque.setText(
-                f"📦 Almoxarifado: {dados['estoque_almoxarifado']} unidades | Ativo: {dados['estoque_ativo']}"
-            )
-            self.lbl_consumivel.setText(dados.get("consumivel", "NÃO").strip().upper())
-
-            self.dados_ferramenta = dados  # Guarda os dados para uso na movimentação
-
-            self.spin_quantidade.setValue(1)
-            self.spin_quantidade.setMaximum(999)
-
-            # Habilita botão de consumo se for SIM
-            if dados.get("consumivel", "NÃO").strip().upper() == "SIM":
-                self.btn_consumir.setEnabled(True)
-            else:
-                self.btn_consumir.setEnabled(False)
-        else:
-            self.lbl_descricao.setText("🔎 Descrição: -")
-            self.lbl_estoque.setText("📦 Almoxarifado: - | Ativo: -")
-            self.lbl_consumivel.setText("🔁 Consumível: -")
-            self._exibir_mensagem("Erro", "❌ Peça não encontrada.", "warning")
-            self.dados_ferramenta = None
-            self.btn_consumir.setEnabled(False)
-
-    def realizar_movimentacao_gui(self, acao):
-        """
-        Realiza a movimentação da ferramenta conforme a ação especificada (RETIRADA, DEVOLUCAO ou CONSUMO)
-        e atualiza a interface.
-        """
-        codigo_barras = self.validar_campos()
-        if not codigo_barras:
+    def _executar_acao(self, acao):
+        cod = self.validar_campos()
+        if not cod or not self.dados_ferramenta:
+            self._aplicar_feedback_erro("Nenhuma ferramenta selecionada.")
             return
-
-        if not hasattr(self, 'dados_ferramenta') or not self.dados_ferramenta:
-            self._aplicar_feedback_erro("❌ Nenhuma peça selecionada.")
+        q = self.spin_qtd.value()
+        disp = self.dados_ferramenta['estoque_almoxarifado']
+        ativos = buscar_estoque_ativo_usuario(self.rfid_usuario)
+        saldo = next((r[3] for r in ativos if r[0]==self.dados_ferramenta['id']),0)
+        if acao=='RETIRADA' and q>disp:
+            self._aplicar_feedback_erro("Estoque insuficiente.")
             return
-
-        # Atualizado para utilizar a nova nomenclatura: estoque_almoxarifado
-        estoque_disponivel = self.dados_ferramenta['estoque_almoxarifado']
-        estoque_ativo = self.dados_ferramenta['estoque_ativo']
-        quantidade = self.spin_quantidade.value()
-
-        # Verificações manuais de limites
-        if acao == "RETIRADA" and quantidade > estoque_disponivel:
-            self._aplicar_feedback_erro("❌ Estoque insuficiente para retirada.")
-            self.spin_quantidade.clear()
+        if acao=='DEVOLUCAO' and q>saldo:
+            self._aplicar_feedback_erro("Ativo insuficiente.")
             return
-
-        if acao == "DEVOLUCAO" and quantidade > estoque_ativo:
-            self._aplicar_feedback_erro("❌ Estoque ativo insuficiente para devolução.")
-            self.spin_quantidade.clear()
+        if acao=='CONSUMO' and q>disp:
+            self._aplicar_feedback_erro("Estoque insuficiente.")
             return
-
-        if acao == "CONSUMO" and quantidade > estoque_disponivel:
-            self._aplicar_feedback_erro("❌ Estoque insuficiente para consumo.")
-            self.spin_quantidade.clear()
-            return
-
-        # Ajusta visualmente, tudo ok
         self._resetar_feedback_visual()
-
-        # Pop-up para consumo
-        if acao == "CONSUMO":
-            dialog = DialogoConsumo(self)
-            if dialog.exec_() == QDialog.Accepted:
-                motivo, operacoes, avaliacao = dialog.get_values()
-                resposta = realizar_movimentacao(
-                    self.rfid_usuario, codigo_barras, acao, quantidade, motivo, operacoes, avaliacao
-                )
-            else:
-                return  # Movimentação cancelada
+        if acao=='CONSUMO':
+            dlg=DialogoConsumo(self)
+            if dlg.exec_()!=QDialog.Accepted: return
+            motivo,ops,aval=dlg.get_values()
+            resp=realizar_movimentacao(self.rfid_usuario,cod,acao,q,motivo,ops,aval)
         else:
-            resposta = realizar_movimentacao(self.rfid_usuario, codigo_barras, acao, quantidade)
-
-        # Resposta e feedback visual
-        if isinstance(resposta, dict):
-            mensagem = resposta.get("mensagem", "")
-            if resposta.get("status"):
-                self.label_status.setText(mensagem)
-                self._limpar_campos()
-                self.carregar_ultimas_movimentacoes()
-            else:
-                self._aplicar_feedback_erro(mensagem)
+            resp=realizar_movimentacao(self.rfid_usuario,cod,acao,q)
+        ok=resp.get('status') if isinstance(resp,dict) else False
+        msg=resp.get('mensagem') if isinstance(resp,dict) else str(resp)
+        if ok:
+            self.label_status.setText(msg)
+            self._limpar_campos()
+            self.carregar_ultimas_movimentacoes()
+            self.carregar_estoque_ativo()
         else:
-            if isinstance(resposta, str) and resposta.startswith("❌"):
-                self._aplicar_feedback_erro(resposta)
-            else:
-                self.label_status.setText(resposta)
+            self._aplicar_feedback_erro(msg)
 
-    def _aplicar_feedback_erro(self, mensagem):
-        self.spin_quantidade.setStyleSheet("background-color: #ffcccc;")
-        self.label_status.setStyleSheet("color: red; font-weight: bold;")
-        self.label_status.setText(mensagem)
+    def _aplicar_feedback_erro(self, m):
+        self.spin_qtd.setStyleSheet("background-color:#ffcccc;")
+        self.label_status.setStyleSheet("color:red;font-weight:bold;")
+        self.label_status.setText(m)
 
     def _resetar_feedback_visual(self):
-        self.spin_quantidade.setStyleSheet("")
-        self.label_status.setStyleSheet("color: black; font-weight: normal;")
+        self.spin_qtd.setStyleSheet("")
+        self.label_status.setStyleSheet("color:black;font-weight:normal;")
         self.label_status.setText("")
 
     def _limpar_campos(self):
-        """
-        Limpa os campos de entrada e reseta os labels para os valores padrão.
-        """
-        self.codigo_barras_input.clear()
+        self.codigo_input.clear()
         self.lbl_descricao.setText("🔎 Descrição: -")
         self.lbl_estoque.setText("📦 Almoxarifado: - | Ativo: -")
-        self.spin_quantidade.setValue(1)
+        self.lbl_consumivel.setText("🔁 Consumível: -")
+        self.spin_qtd.setValue(1)
 
     def carregar_ultimas_movimentacoes(self):
-        """
-        Carrega e exibe as últimas movimentações na tabela.
-        """
-        dados = buscar_ultimas_movimentacoes()
-        self.tabela.setRowCount(0)
+        dados=buscar_ultimas_movimentacoes()
+        self.table_logs.setRowCount(0)
         for linha in dados:
-            row = self.tabela.rowCount()
-            self.tabela.insertRow(row)
-            for col, item in enumerate(linha):
-                self.tabela.setItem(row, col, QTableWidgetItem(str(item)))
+            r=self.table_logs.rowCount()
+            self.table_logs.insertRow(r)
+            for c,item in enumerate(linha):
+                self.table_logs.setItem(r,c,QTableWidgetItem(str(item)))
+
+    def carregar_estoque_ativo(self):
+        dados=buscar_estoque_ativo_usuario(self.rfid_usuario)
+        self.table_ativo.setRowCount(0)
+        for fid,nome,cod,sal in dados:
+            r=self.table_ativo.rowCount()
+            self.table_ativo.insertRow(r)
+            self.table_ativo.setItem(r,0,QTableWidgetItem(cod))
+            self.table_ativo.setItem(r,1,QTableWidgetItem(nome))
+            self.table_ativo.setItem(r,2,QTableWidgetItem(str(sal)))

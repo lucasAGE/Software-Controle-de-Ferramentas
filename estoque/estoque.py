@@ -7,6 +7,7 @@ from PyQt5.QtGui import QIntValidator
 
 from main import adicionar_ferramenta, subtrair_ferramenta, zerar_ferramenta
 from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
+from database.database_utils import buscar_estoque_ativo_usuario
 
 
 class TelaEstoque(QWidget):
@@ -15,12 +16,9 @@ class TelaEstoque(QWidget):
       - ADICAO (➕)
       - SUBTRACAO parcial (➖)
       - ZERAR estoque (🗑️)
-    Mostra descrição, valores atuais e histórico de movimentações.
+    Mostra descrição, valores atuais e histórico de movimentações, além do estoque ativo dinâmico por usuário.
     """
     def __init__(self, navegacao):
-        """
-        :param navegacao: instância de Navegacao, que mantém rfid_usuario atualizado
-        """
         super().__init__()
         self.navegacao = navegacao
         self._build_ui()
@@ -49,7 +47,7 @@ class TelaEstoque(QWidget):
 
         # Labels descrição e estoque
         self.lbl_descricao = QLabel("🔎 Descrição: -")
-        self.lbl_estoque   = QLabel("📦 Almoxarifado: - | Ativo: -")
+        self.lbl_estoque = QLabel("📦 Almoxarifado: - | Ativo: -")
         layout.addWidget(self.lbl_descricao)
         layout.addWidget(self.lbl_estoque)
 
@@ -83,19 +81,24 @@ class TelaEstoque(QWidget):
         self.codigo_input.setFocus()
         self._refresh_history()
 
+    def atualizar_tela(self):
+        """
+        Atualiza a tela ao exibi-la: limpa campos, histórico e mantém código de barras.
+        """
+        self._clear_labels()
+        self._refresh_history()
+
     def _get_rfid(self):
-        """Retorna o RFID atual; exibe erro se não estiver definido."""
+        """Retorna o RFID do usuário atual ou exibe aviso."""
         rfid = getattr(self.navegacao, "rfid_usuario", None)
         if not rfid:
             QMessageBox.warning(self, "Erro", "⚠️ Usuário não identificado.")
         return rfid
 
     def adicionar(self):
-        """Executa ADICAO via adicionar_ferramenta."""
         rfid = self._get_rfid()
         if not rfid:
             return
-
         cod = self.codigo_input.text().strip()
         qt  = self.qtde_input.text().strip()
         if not cod:
@@ -108,19 +111,17 @@ class TelaEstoque(QWidget):
             return self._msg("Erro", "Quantidade inválida.", "warning")
 
         resp = adicionar_ferramenta(rfid, cod, q)
-        if resp.startswith("✅"):
-            self._msg("Sucesso", resp, "info")
+        if resp.get('status'):
+            self._msg("Sucesso", resp.get('mensagem'), "info")
             self._clear_all()
             self._refresh_history()
         else:
-            self._msg("Erro", resp, "warning")
+            self._msg("Erro", resp.get('mensagem'), "warning")
 
     def subtrair(self):
-        """Executa SUBTRACAO parcial via subtrair_ferramenta."""
         rfid = self._get_rfid()
         if not rfid:
             return
-
         cod = self.codigo_input.text().strip()
         qt  = self.qtde_input.text().strip()
         if not cod:
@@ -133,50 +134,50 @@ class TelaEstoque(QWidget):
             return self._msg("Erro", "Quantidade inválida.", "warning")
 
         resp = subtrair_ferramenta(rfid, cod, q)
-        if resp.startswith("✅"):
-            self._msg("Sucesso", resp, "info")
+        if resp.get('status'):
+            self._msg("Sucesso", resp.get('mensagem'), "info")
             self._clear_all()
             self._refresh_history()
         else:
-            self._msg("Erro", resp, "warning")
+            self._msg("Erro", resp.get('mensagem'), "warning")
 
     def zerar(self):
-        """Executa ZERAR estoque via zerar_ferramenta."""
         rfid = self._get_rfid()
         if not rfid:
             return
-
         cod = self.codigo_input.text().strip()
         if not cod:
             return self._msg("Erro", "Informe o código da ferramenta.", "warning")
 
         resp = zerar_ferramenta(rfid, cod)
-        if resp.startswith("✅"):
-            self._msg("Sucesso", resp, "info")
+        if resp.get('status'):
+            self._msg("Sucesso", resp.get('mensagem'), "info")
             self._clear_all()
             self._refresh_history()
         else:
-            self._msg("Erro", resp, "warning")
+            self._msg("Erro", resp.get('mensagem'), "warning")
 
     def _on_codigo_enter(self):
-        """Ao pressionar Enter no código, busca dados e atualiza histórico."""
         cod = self.codigo_input.text().strip()
         if not cod:
             self._clear_labels()
         else:
             dados = buscar_ferramenta_por_codigo(cod)
             if dados:
+                # Estoque almoxarifado estático
+                est_alm = dados['estoque_almoxarifado']
+                # Calcula estoque ativo dinâmico
+                rfid = self._get_rfid()
+                ativos = buscar_estoque_ativo_usuario(rfid) if rfid else []
+                sal = next((r[3] for r in ativos if r[0] == dados['id']), 0)
                 self.lbl_descricao.setText(f"🔎 Descrição: {dados['nome']}")
-                self.lbl_estoque.setText(
-                    f"📦 Almoxarifado: {dados['estoque_almoxarifado']} | Ativo: {dados['estoque_ativo']}"
-                )
+                self.lbl_estoque.setText(f"📦 Almoxarifado: {est_alm} | Ativo: {sal}")
             else:
                 QMessageBox.warning(self, "Erro", "Ferramenta não encontrada.")
                 self._clear_labels()
         self._refresh_history()
 
     def _refresh_history(self):
-        """Recarrega a tabela com as últimas movimentações."""
         registros = buscar_ultimas_movimentacoes()
         self.tabela.setRowCount(0)
         for linha in registros:
@@ -186,18 +187,15 @@ class TelaEstoque(QWidget):
                 self.tabela.setItem(row, col, QTableWidgetItem(str(val)))
 
     def _clear_all(self):
-        """Limpa campos de entrada e labels."""
         self.codigo_input.clear()
         self.qtde_input.clear()
         self._clear_labels()
 
     def _clear_labels(self):
-        """Reseta labels de descrição e estoque."""
         self.lbl_descricao.setText("🔎 Descrição: -")
         self.lbl_estoque.setText("📦 Almoxarifado: - | Ativo: -")
 
     def _msg(self, title, text, kind="info"):
-        """Exibe QMessageBox de informação ou alerta."""
         if kind == "info":
             QMessageBox.information(self, title, text)
         else:
