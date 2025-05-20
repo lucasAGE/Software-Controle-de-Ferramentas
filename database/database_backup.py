@@ -3,15 +3,13 @@ import shutil
 import datetime
 from database.config import BACKUP_DIR, DATABASE_CAMINHO
 
-
-
 # Cria o diretório de backup, se não existir.
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 TURNOS = {
     "1turno": datetime.time(6, 0),
-    "2turno": datetime.time(14, 0),
-    "3turno": datetime.time(22, 0),
+    "2turno": datetime.time(13, 0),
+    "3turno": datetime.time(21, 0),
 }
 
 def get_turno_atual():
