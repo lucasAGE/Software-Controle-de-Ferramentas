@@ -4,4 +4,4 @@ class ClientConfig(object):
     COMPANY_NAME = 'Lucas Albert Gommersbach'
     HTTP_TIMEOUT = 30
     MAX_DOWNLOAD_RETRIES = 3
-    UPDATE_URLS = ['']
+    UPDATE_URLS = ["https://github.com/lucasAGE/Software-Controle-de-Ferramentas/releases/download/"]
