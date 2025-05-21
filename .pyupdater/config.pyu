@@ -1,0 +1,20 @@
+{
+  "config_dir": "C:\\Users\\Lucas\\ALL\\Ensimec\\Controle de Ferramentas\\Software Controle de Ferramentas\\.pyupdater",
+  "filename": "C:\\Users\\Lucas\\ALL\\Ensimec\\Controle de Ferramentas\\Software Controle de Ferramentas\\.pyupdater\\config.pyu",
+  "count": 0,
+  "app_config": {
+    "APP_NAME": "Software de Controle de Ferramentas",
+    "CLIENT_CONFIG_PATH": [
+      "client_config.py"
+    ],
+    "COMPANY_NAME": "Lucas Albert Gommersbach",
+    "PLUGIN_CONFIGS": {},
+    "UPDATE_PATCHES": true,
+    "MAX_DOWNLOAD_RETRIES": 3,
+    "HTTP_TIMEOUT": 30,
+    "UPDATE_URLS": [
+      ""
+    ],
+    "DATA_DIR": "C:\\Users\\Lucas\\ALL\\Ensimec\\Controle de Ferramentas\\Software Controle de Ferramentas"
+  }
+}

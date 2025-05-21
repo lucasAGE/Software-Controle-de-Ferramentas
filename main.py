@@ -32,6 +32,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s - %(message)s"
 )
 
+__version__ = "v1.0.0.beta"
 
 # ----- Funções de Administração -----
 
