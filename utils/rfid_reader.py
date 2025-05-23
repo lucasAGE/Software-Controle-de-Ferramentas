@@ -1,4 +1,3 @@
-import time
 from database.database_utils import executar_query
 
 def ler_rfid() -> str | None:

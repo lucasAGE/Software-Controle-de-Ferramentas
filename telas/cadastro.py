@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QIntValidator
 from PyQt5.QtCore import Qt
 
-from main import registrar_usuario, registrar_ferramenta, registrar_maquina
+from utils.registro import registrar_usuario, registrar_ferramenta, registrar_maquina
 from database.database_utils import executar_query
 
 def hash_senha(senha):

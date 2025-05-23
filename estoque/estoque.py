@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIntValidator
 
-from main import adicionar_ferramenta, subtrair_ferramenta, zerar_ferramenta
+from utils.movimentacoes import adicionar_ferramenta, subtrair_ferramenta, zerar_ferramenta
 from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
 from database.database_utils import buscar_estoque_ativo_usuario
 

@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from main import realizar_movimentacao
+from utils.movimentacoes import realizar_movimentacao
 from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
 from database.database_utils import buscar_estoque_ativo_usuario
 
@@ -173,10 +173,6 @@ from PyQt5.QtWidgets import (
     QMessageBox, QSpinBox, QTableWidget, QTableWidgetItem, QDialog, QDialogButtonBox
 )
 from PyQt5.QtCore import Qt
-
-from main import realizar_movimentacao
-from database.database import buscar_ferramenta_por_codigo, buscar_ultimas_movimentacoes
-from database.database_utils import buscar_estoque_ativo_usuario
 
 
 class DialogoConsumo(QDialog):

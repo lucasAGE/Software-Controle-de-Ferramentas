@@ -1,35 +1,36 @@
+#!/usr/bin/env python3
+"""
+Admin.py
+
+Tela de administração: gerencia usuários, máquinas e ferramentas.
+"""
+
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QPushButton, QLineEdit, QFormLayout, QMessageBox
 )
 from PyQt5.QtGui import QFont, QIntValidator
 from PyQt5.QtCore import Qt
 
-from main import registrar_usuario, registrar_ferramenta, registrar_maquina
+from utils.registro import registrar_usuario
+from utils.registro import registrar_ferramenta
+from utils.registro import registrar_maquina
 
 
 class Admin(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Administrador")
-        # Removemos a geometria fixa, pois vamos usar tela cheia
-        # self.setGeometry(200, 200, 400, 350)
-
-        # Define uma fonte padrão maior para todos os widgets
         self.setFont(QFont("Arial", 14))
-        
         main_layout = QVBoxLayout()
 
-        # Criação das seções de usuários, máquinas e ferramentas
         self.build_user_section(main_layout)
         self.build_machine_section(main_layout)
         self.build_tool_section(main_layout)
 
         self.setLayout(main_layout)
-        # Exibe a janela maximizada (modo full-screen)
         self.showMaximized()
 
     def build_user_section(self, layout):
-        """Cria a seção de gerenciamento de usuários."""
         label_usuarios = QLabel("🔹 Gerenciar Usuários")
         label_usuarios.setAlignment(Qt.AlignCenter)
         label_usuarios.setFont(QFont("Arial", 16, QFont.Bold))
@@ -37,7 +38,6 @@ class Admin(QWidget):
 
         self.nome_usuario_input = QLineEdit()
         self.rfid_input = QLineEdit()
-
         form_usuarios = QFormLayout()
         form_usuarios.addRow("Nome:", self.nome_usuario_input)
         form_usuarios.addRow("RFID:", self.rfid_input)
@@ -48,14 +48,12 @@ class Admin(QWidget):
         layout.addWidget(adicionar_usuario_btn)
 
     def build_machine_section(self, layout):
-        """Cria a seção de gerenciamento de máquinas."""
         label_maquinas = QLabel("🔹 Gerenciar Máquinas")
         label_maquinas.setAlignment(Qt.AlignCenter)
         label_maquinas.setFont(QFont("Arial", 16, QFont.Bold))
         layout.addWidget(label_maquinas)
 
         self.nome_maquina_input = QLineEdit()
-
         form_maquinas = QFormLayout()
         form_maquinas.addRow("Nome:", self.nome_maquina_input)
         layout.addLayout(form_maquinas)
@@ -65,7 +63,6 @@ class Admin(QWidget):
         layout.addWidget(adicionar_maquina_btn)
 
     def build_tool_section(self, layout):
-        """Cria a seção de gerenciamento de ferramentas."""
         label_ferramentas = QLabel("🔹 Gerenciar Ferramentas")
         label_ferramentas.setAlignment(Qt.AlignCenter)
         label_ferramentas.setFont(QFont("Arial", 16, QFont.Bold))
@@ -74,13 +71,11 @@ class Admin(QWidget):
         self.nome_ferramenta_input = QLineEdit()
         self.codigo_barra_input = QLineEdit()
         self.quantidade_input = QLineEdit()
-        # Validador para garantir que o valor seja um inteiro válido
         self.quantidade_input.setValidator(QIntValidator(0, 10000, self))
 
         form_ferramentas = QFormLayout()
         form_ferramentas.addRow("Nome:", self.nome_ferramenta_input)
         form_ferramentas.addRow("Código de Barra:", self.codigo_barra_input)
-        # Atualizamos o rótulo para refletir a nova terminologia (estoque almoxarifado)
         form_ferramentas.addRow("Estoque Almoxarifado:", self.quantidade_input)
         layout.addLayout(form_ferramentas)
 
@@ -89,18 +84,13 @@ class Admin(QWidget):
         layout.addWidget(adicionar_ferramenta_btn)
 
     def validate_fields(self, fields):
-        """
-        Valida os campos informados.
-        fields: lista de tuplas (nome_do_campo, QLineEdit)
-        """
-        for field_name, field in fields:
+        for name, field in fields:
             if not field.text().strip():
-                QMessageBox.warning(self, "Erro", f"⚠️ Preencha o campo '{field_name}' corretamente!")
+                QMessageBox.warning(self, "Erro", f"⚠️ Preencha o campo '{name}' corretamente!")
                 return False
         return True
 
     def show_message(self, title, message, info=True):
-        """Exibe mensagem de informação ou alerta."""
         if info:
             QMessageBox.information(self, title, message)
         else:
@@ -109,17 +99,9 @@ class Admin(QWidget):
     def adicionar_usuario(self):
         if not self.validate_fields([("Nome", self.nome_usuario_input), ("RFID", self.rfid_input)]):
             return
-
         nome = self.nome_usuario_input.text().strip()
         rfid = self.rfid_input.text().strip()
-
-        try:
-            # Para o registro de usuário, foi adicionado a senha e o tipo com valores padrões
-            resposta = registrar_usuario(nome, "senha", rfid, "operador")
-        except Exception as e:
-            self.show_message("Erro", f"Erro ao registrar usuário: {str(e)}", info=False)
-            return
-
+        resposta = registrar_usuario(nome, "senha", rfid, "operador")
         if resposta.startswith("✅"):
             self.show_message("Sucesso", resposta)
             self.nome_usuario_input.clear()
@@ -130,16 +112,8 @@ class Admin(QWidget):
     def adicionar_maquina(self):
         if not self.validate_fields([("Nome", self.nome_maquina_input)]):
             return
-
         nome = self.nome_maquina_input.text().strip()
-
-        try:
-            # Atualizado para utilizar apenas o nome, conforme a nova assinatura
-            resposta = registrar_maquina(nome)
-        except Exception as e:
-            self.show_message("Erro", f"Erro ao registrar máquina: {str(e)}", info=False)
-            return
-
+        resposta = registrar_maquina(nome)
         if resposta.startswith("✅"):
             self.show_message("Sucesso", resposta)
             self.nome_maquina_input.clear()
@@ -148,33 +122,19 @@ class Admin(QWidget):
 
     def adicionar_ferramenta(self):
         if not self.validate_fields([
-                ("Nome", self.nome_ferramenta_input),
-                ("Código de Barra", self.codigo_barra_input),
-                ("Estoque Almoxarifado", self.quantidade_input)
-            ]):
+            ("Nome", self.nome_ferramenta_input),
+            ("Código de Barra", self.codigo_barra_input),
+            ("Estoque Almoxarifado", self.quantidade_input)
+        ]):
             return
-
         nome = self.nome_ferramenta_input.text().strip()
-        codigo_barra = self.codigo_barra_input.text().strip()
-        quantidade_str = self.quantidade_input.text().strip()
-
-        # A validação de quantidade é reforçada pelo QIntValidator, mas checamos para garantir
-        if not quantidade_str.isdigit():
+        codigo = self.codigo_barra_input.text().strip()
+        qtd_str = self.quantidade_input.text().strip()
+        if not qtd_str.isdigit():
             self.show_message("Erro", "⚠️ A quantidade deve ser um número válido!", info=False)
             return
-
-        quantidade = int(quantidade_str)
-
-        try:
-            # Para registrar uma ferramenta, usamos:
-            # - Estoque Almoxarifado: valor informado no formulário;
-            # - Estoque Ativo: inicializamos com 0;
-            # - Consumível: definido como padrão 'NÃO'
-            resposta = registrar_ferramenta(nome, codigo_barra, quantidade, 0, "NÃO")
-        except Exception as e:
-            self.show_message("Erro", f"Erro ao registrar ferramenta: {str(e)}", info=False)
-            return
-
+        qtd = int(qtd_str)
+        resposta = registrar_ferramenta(nome, codigo, qtd, "NÃO")
         if resposta.startswith("✅"):
             self.show_message("Sucesso", resposta)
             self.nome_ferramenta_input.clear()
